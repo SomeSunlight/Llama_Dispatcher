@@ -1,0 +1,10 @@
+# defaults/engine-templates/cuda.yaml
+# TEMPLATE – Kopiere nach instances/<name>/engines/cuda.yaml und passe bin_dir an.
+#
+# NVIDIA CUDA – llama.cpp CUDA-Build
+# Typischer Einsatz: Desktop-GPU (RTX 3090, 4090, etc.)
+
+bin_dir: "c:\\llama-cpp\\server\\server_cuda"
+# server_bin: "llama-server.exe"   # Optional – Standard ist llama-server.exe
+
+

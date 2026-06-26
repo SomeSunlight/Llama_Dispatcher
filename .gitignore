@@ -1,0 +1,28 @@
+# --- OS Specific ---
+.DS_Store
+Thumbs.db
+
+# --- IDEs & Editors (JetBrains, VS Code, Sublime) ---
+.idea/
+identifier.sqlite
+.vscode/
+*.sublime-project
+*.sublime-workspace
+.history/
+
+# --- Python & Environment ---
+.venv/
+venv/
+ENV/
+__pycache__/
+*.py[cod]
+*$py.class
+
+*.bak
+/data/open_webui_models.ini
+/data/thinkpad_models.ini
+
+# --- Instance data (machine-specific, managed as separate private repo) ---
+# Jede Instanz liegt unter instances/<name>/ und kann dort als eigenes Git-Repo verwaltet werden.
+instances/
+

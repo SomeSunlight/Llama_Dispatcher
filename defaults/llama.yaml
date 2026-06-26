@@ -1,0 +1,15 @@
+# defaults/models/llama.yaml
+# Meta Llama – empfohlene Sampling-Parameter (hardware-agnostisch)
+# Quelle: https://llama.meta.com/
+#
+# Wird in Profilen referenziert via:
+#   defaults:
+#     model: "llama"
+
+serve:
+  sampling:
+    temperature: 0.6
+    top_p: 0.9
+    top_k: 50
+    repeat_penalty: 1.0
+    min_p: 0.0

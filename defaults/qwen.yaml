@@ -1,0 +1,15 @@
+# defaults/models/qwen.yaml
+# Alibaba Qwen – empfohlene Sampling-Parameter (hardware-agnostisch)
+# Quelle: https://qwen.readthedocs.io/
+#
+# Wird in Profilen referenziert via:
+#   defaults:
+#     model: "qwen"
+
+serve:
+  sampling:
+    temperature: 0.7
+    top_p: 0.8
+    top_k: 20
+    repeat_penalty: 1.05
+    min_p: 0.0

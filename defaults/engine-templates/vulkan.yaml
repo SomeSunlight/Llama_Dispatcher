@@ -1,0 +1,10 @@
+# defaults/engine-templates/vulkan.yaml
+# TEMPLATE – Kopiere nach instances/<name>/engines/vulkan.yaml und passe bin_dir an.
+#
+# Vulkan – llama.cpp Vulkan-Build
+# Typischer Einsatz: AMD/Intel GPU, Laptop-GPUs ohne CUDA-Support
+
+bin_dir: "c:\\llama-cpp\\server\\server_vulkan"
+# server_bin: "llama-server.exe"   # Optional – Standard ist llama-server.exe
+
+

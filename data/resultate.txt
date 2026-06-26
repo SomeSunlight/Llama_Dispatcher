@@ -1,0 +1,36 @@
+PS C:\llama-cpp\Llama_Dispatcher> uv run src/dispatcher.py bench --profile normal_workhorse
+⏱️ Starte Benchmark mit Kommando:
+c:\llama-cpp\server\server_01_standard\llama-bench.exe -m C:\AI_Models\LLM\GGUF_Raw\gemma-4-26B-A4B-APEX-I-Compact.gguf -ngl 99 --threads 16 -ctk q8_0 -ctv q8_0 --flash-attn 1 -pg 512,128 -pg 32768,128 -pg 65536,128 -pg 65408,128
+
+ggml_cuda_init: found 1 CUDA devices (Total VRAM: 24575 MiB):
+  Device 0: NVIDIA GeForce RTX 3090, compute capability 8.6, VMM: yes, VRAM: 24575 MiB
+load_backend: loaded CUDA backend from c:\llama-cpp\server\server_01_standard\ggml-cuda.dll
+load_backend: loaded RPC backend from c:\llama-cpp\server\server_01_standard\ggml-rpc.dll
+load_backend: loaded CPU backend from c:\llama-cpp\server\server_01_standard\ggml-cpu-haswell.dll
+| model                          |       size |     params | backend    | ngl | type_k | type_v | fa |            test |                  t/s |
+| ------------------------------ | ---------: | ---------: | ---------- | --: | -----: | -----: | -: | --------------: | -------------------: |
+| gemma4 26B.A4B Q4_K - Medium   |  13.78 GiB |    25.23 B | CUDA       |  99 |   q8_0 |   q8_0 |  1 |           pp512 |      4098.22 ± 31.65 |
+| gemma4 26B.A4B Q4_K - Medium   |  13.78 GiB |    25.23 B | CUDA       |  99 |   q8_0 |   q8_0 |  1 |           tg128 |        135.10 ± 0.57 |
+| gemma4 26B.A4B Q4_K - Medium   |  13.78 GiB |    25.23 B | CUDA       |  99 |   q8_0 |   q8_0 |  1 |     pp512+tg128 |        588.70 ± 1.51 |
+| gemma4 26B.A4B Q4_K - Medium   |  13.78 GiB |    25.23 B | CUDA       |  99 |   q8_0 |   q8_0 |  1 |   pp32768+tg128 |      2890.54 ± 10.58 |
+| gemma4 26B.A4B Q4_K - Medium   |  13.78 GiB |    25.23 B | CUDA       |  99 |   q8_0 |   q8_0 |  1 |   pp65536+tg128 |       2473.25 ± 6.61 |
+| gemma4 26B.A4B Q4_K - Medium   |  13.78 GiB |    25.23 B | CUDA       |  99 |   q8_0 |   q8_0 |  1 |   pp65408+tg128 |      2494.20 ± 28.96 |
+
+
+
+PS C:\llama-cpp\Llama_Dispatcher> uv run src/dispatcher.py bench --profile turboquant_workhorse
+⏱️ Starte Benchmark mit Kommando:
+c:\llama-cpp\server\server_02_turboquant\llama-bench.exe -m C:\AI_Models\LLM\GGUF_Raw\gemma-4-26B-A4B-APEX-I-Compact.gguf -ngl 99 --threads 16 -ctk turbo4 -ctv turbo4 --flash-attn 1 -pg 512,128 -pg 32768,128 -pg 65536,128 -pg 65408,128
+
+ggml_cuda_init: found 1 CUDA devices (Total VRAM: 24575 MiB):
+  Device 0: NVIDIA GeForce RTX 3090, compute capability 8.6, VMM: yes, VRAM: 24575 MiB
+load_backend: loaded CUDA backend from c:\llama-cpp\server\server_02_turboquant\ggml-cuda.dll
+load_backend: loaded RPC backend from c:\llama-cpp\server\server_02_turboquant\ggml-rpc.dll
+load_backend: loaded CPU backend from c:\llama-cpp\server\server_02_turboquant\ggml-cpu.dll
+| model                          |       size |     params | backend    | ngl | type_k | type_v | fa |            test |                  t/s |
+| ------------------------------ | ---------: | ---------: | ---------- | --: | -----: | -----: | -: | --------------: | -------------------: |
+TCQ decode: context-adaptive V alpha enabled
+| gemma4 26B.A4B Q4_K - Medium   |  13.78 GiB |    25.23 B | CUDA       |  99 | turbo4 | turbo4 |  1 |           pp512 |      3424.39 ± 52.32 |
+| gemma4 26B.A4B Q4_K - Medium   |  13.78 GiB |    25.23 B | CUDA       |  99 | turbo4 | turbo4 |  1 |           tg128 |        106.06 ± 1.00 |
+| gemma4 26B.A4B Q4_K - Medium   |  13.78 GiB |    25.23 B | CUDA       |  99 | turbo4 | turbo4 |  1 |     pp512+tg128 |        460.38 ± 0.97 |
+| gemma4 26B.A4B Q4_K - Medium   |  13.78 GiB |    25.23 B | CUDA       |  99 | turbo4 | turbo4 |  1 |   pp32768+tg128 |        807.55 ± 0.47 |

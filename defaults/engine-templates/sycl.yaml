@@ -1,0 +1,13 @@
+# defaults/engine-templates/sycl.yaml
+# TEMPLATE – Kopiere nach instances/<name>/engines/sycl.yaml und passe bin_dir an.
+#
+# SYCL / Intel oneAPI – llama.cpp SYCL-Build
+# Typischer Einsatz: Intel Arc GPU, Intel integrierte GPU
+#
+# Pflichtfeld nach dem Kopieren:
+#   bin_dir: "c:\\llama.cpp\\server\\server_07_SYCL"
+#
+# Optionales Feld:
+#   server_bin: "llama-server.exe"
+
+

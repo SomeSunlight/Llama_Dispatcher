@@ -1,0 +1,18 @@
+# defaults/models/gemma.yaml
+# Google Gemma – empfohlene Sampling-Parameter (hardware-agnostisch)
+# Quelle: https://ai.google.dev/gemma/docs/
+#
+# Wird in Profilen referenziert via:
+#   defaults:
+#     model: "gemma"
+#
+# Abweichende Profil-Werte überschreiben diese Defaults (deep merge).
+# Abweichungen sollten im Profil mit # ! kommentiert sein.
+
+serve:
+  sampling:
+    temperature: 1.0
+    top_p: 0.95
+    top_k: 64
+    repeat_penalty: 1.0
+    min_p: 0.0

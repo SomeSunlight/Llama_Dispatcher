@@ -1,0 +1,18 @@
+{
+  "alias": "workhorse",
+  "model": "C:\\AI_Models\\LLM\\GGUF_Raw\\gemma-4-26B-A4B-APEX-I-Compact.gguf",
+  "ctx-size": 131072,
+  "n-gpu-layers": 99,
+  "threads": 16,
+  "cache-type-k": "q8_0",
+  "cache-type-v": "q8_0",
+  "flash-attn": true,
+  "mmproj": "C:\\AI_Models\\LLM\\GGUF_Raw\\gemma-4-26B-A4B-it.mmproj-q8_0.gguf",
+  "image-min-tokens": 300,
+  "image-max-tokens": 512,
+  "ubatch-size": 2048,
+  "batch-size": 2048,
+  "parallel": 4,
+  "cont-batching": true,
+  "jinja": true
+}
