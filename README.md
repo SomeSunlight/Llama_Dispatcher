@@ -23,7 +23,9 @@ Diese Trennung ermöglicht: ein einziges Modell im VRAM, aber mehrere „Persön
 10. [Serve-Modi](#10-serve-modi)
 11. [Bench und Eval](#11-bench-und-eval)
 12. [Datenbank](#12-datenbank)
-13. [Starten – Schnellreferenz](#13-starten--schnellreferenz)
+13. [CLI-Referenz](#13-cli-referenz)
+14. [Parameternamen-System](#14-parameternamen-system)
+15. [Starten – Schnellreferenz](#15-starten--schnellreferenz)
 
 ---
 
@@ -86,29 +88,67 @@ Llama_Dispatcher/
 
 Jede Maschine ist eine **Instanz** unter `instances/<name>/`. Der Haupt-Dispatcher-Code ist öffentlich auf GitHub; die Instanzen enthalten Maschinenpfade, Modellpfade und private Daten – diese gehören **nicht** ins öffentliche Repo.
 
-**Lösung:** `instances/` ist im Haupt-`.gitignore` ausgenommen und wird als **eigenes privates Git-Repo** verwaltet:
+**Lösung:** `instances/` ist im Haupt-`.gitignore` ausgenommen. Jede Instanz ist ein **eigenes privates Git-Repo**:
+
+| Repo | Sichtbarkeit | Inhalt |
+|---|---|---|
+| `SomeSunlight/Llama_Dispatcher` | öffentlich | Code, Defaults, Dokumentation |
+| `SomeSunlight/Llama_Dispatcher_Laptop` | privat | Laptop-Profile, Engines, Ensembles |
+| `SomeSunlight/Llama_Dispatcher_Speedy` | privat | Speedy-Profile, Engines, Ensembles |
+
+### Fresh Install auf neuem Rechner
+
+Der Trick beim Klonen: `git clone <url> <zielverzeichnis>` erlaubt einen eigenen Ordnernamen –
+so landet die Instanz direkt im richtigen Unterverzeichnis, ohne dass der GitHub-Reponame stört.
+
+```powershell
+# Schritt 1: Hauptrepo klonen
+git clone https://github.com/SomeSunlight/Llama_Dispatcher.git
+cd Llama_Dispatcher
+
+# Schritt 2: Instanz-Repos in die EXAKT richtigen Unterverzeichnisse klonen
+git clone https://github.com/SomeSunlight/Llama_Dispatcher_Laptop.git instances/Laptop
+git clone https://github.com/SomeSunlight/Llama_Dispatcher_Speedy.git instances/Speedy
+
+# Schritt 3: Python-Umgebung
+uv sync
+```
+
+Nach dem Klonen `instance.yaml` prüfen: die `machine_guid` identifiziert die Maschine eindeutig
+in der Metrics-Datenbank. Auf einem neuen Gerät eine neue GUID eintragen oder mit `--instance NeuerName`
+eine frische Instanz anlegen (wird automatisch erstellt).
+
+### Täglicher Workflow nach Konfigurationsänderungen
 
 ```bash
-# Einmalig einrichten (bereits gemacht):
-cd instances/
-git init
-git remote add origin git@github.com:<user>/llama-dispatcher-instances.git
-git push -u origin master
-
-# Täglicher Workflow nach Konfigurationsänderungen:
-cd instances/
+# Laptop-Instanz sichern
+cd instances/Laptop
 git add .
 git commit -m "thinkpad: neuen Agent-Alias konfiguriert"
 git push
+
+# Speedy-Instanz sichern
+cd instances/Speedy
+git add .
+git commit -m "3090: Kontext erhöht"
+git push
 ```
 
-Die `instances/.gitignore` schliesst automatisch aus: `*/data/*.db` und `*/data/*.ini` (generierte Lauf-Artefakte).
+### Was `--instance` bewirkt
 
-**Dispatcher starten mit Instanz-Angabe:**
 ```bash
 uv run src/dispatcher.py serve --ensemble thinkpad --instance Laptop
-uv run src/dispatcher.py serve --ensemble 3090    --instance Speedy
 ```
+
+Mit `--instance Laptop` zeigt der Dispatcher auf `instances/Laptop/profiles|ensembles|data/`
+und liest die `machine_guid` aus `instances/Laptop/instance.yaml`.
+
+**Ohne `--instance`** läuft der Dispatcher im **Legacy-Modus**: er sucht Profile und Ensembles
+direkt unter `profiles/` und `ensembles/` im Projektroot – **kein Prompt**, kein Fehler, nur
+falscher Pfad. Wer die Instanzstruktur nutzt, muss `--instance` immer angeben.
+
+Existiert die angegebene Instanz noch nicht, legt der Dispatcher sie automatisch an
+(leere Verzeichnisse, neue `machine_guid` in `instance.yaml`).
 
 ---
 
@@ -440,11 +480,192 @@ Alle Zeitstempel timezone-aware: `YYYY-MM-DD HH:MM:SS+HH:MM` (lokale Zeit mit UT
 
 ---
 
-## 13. Starten – Schnellreferenz
+## 13. CLI-Referenz
+
+### Aufruf-Syntax
+
+```bash
+uv run src/dispatcher.py <modus> [optionen] [llama.cpp-overrides...]
+```
+
+### Modi (Pflichtargument)
+
+| Modus | Beschreibung |
+|---|---|
+| `serve` | Startet llama.cpp + Dispatcher-Proxy. Benötigt `--ensemble` **oder** `--profile` |
+| `bench` | Benchmark (pp/tg-Geschwindigkeit). Benötigt `--profile` |
+| `eval` | Perplexity-Messung. Benötigt `--profile` und `--dataset` |
+
+### Optionen
+
+| Option | Default | Beschreibung |
+|---|---|---|
+| `--ensemble NAME` | – | Name des Ensemble-YAMLs (ohne `.yaml`). Für `serve` im Router-Modus mit Proxy |
+| `--profile NAME` | – | Name des Profil-YAMLs (ohne `.yaml`). Für `serve` Einzelmodell, `bench`, `eval` |
+| `--instance NAME` | – | Instanzname (Ordner unter `instances/`). **Ohne diesen Parameter läuft der Dispatcher im Legacy-Modus** und sucht Profile/Ensembles im Projektroot. Kein Prompt. |
+| `--api-port PORT` | aus Ensemble oder `8001` | Port des Dispatcher-Proxys. Überschreibt `dispatcher.port` im Ensemble-YAML |
+| `--dataset PFAD` | `data/wikitext-2-raw.txt` | Textdatei für `eval` (Perplexity) |
+| `--compile-only` | – | Kompiliert INI und zeigt den llama.cpp-Startbefehl, startet aber nichts |
+
+### Ad-hoc llama.cpp-Overrides
+
+**Alle** llama.cpp-Parameter können direkt an der CLI übergeben werden – sie überschreiben
+das Profil/Ensemble mit der höchsten Priorität. Der Dispatcher erkennt und kanonisiert
+sämtliche Schreibweisen automatisch (kurz, lang, Binde- oder Unterstrich):
+
+```bash
+# Kontext auf 8192 begrenzen (für schnelle Tests)
+uv run src/dispatcher.py serve --ensemble thinkpad --instance Laptop --ctx-size 8192
+
+# Parallelität und Threads überschreiben
+uv run src/dispatcher.py bench --profile Thinkpad_vulkan_gemma_26B_A4B --instance Laptop \
+    --parallel 2 --threads 8
+
+# Sampling für diesen Start überschreiben
+uv run src/dispatcher.py serve --ensemble thinkpad --instance Laptop \
+    --temperature 0.5 --top-k 40
+```
+
+Boolean-Flags werden als `true`/`false` oder als nacktes Flag akzeptiert:
+```bash
+--flash-attn true   # explizit
+--flash-attn        # äquivalent (Flag ohne Wert = true)
+--no-kv-offload     # negierendes Präfix für Schalter
+```
+
+---
+
+## 14. Parameternamen-System
+
+### Das Problem
+
+YAML verbietet Unterstriche in Schlüsseln nicht, aber llama.cpp verwendet Bindestriche
+(`--ctx-size`, `--cache-type-k`). Obendrauf gibt es Kurz- und Langformen (`-c` vs. `--ctx-size`).
+Das Ensemble/Profil kann aus drei Quellen stammen (Defaults, Engine, Profil), die jeweils
+unterschiedliche Konventionen verwenden könnten. Ohne klare Regel sind Tippfehler
+still und wirkungslos.
+
+### Die Lösung: Kanonisierung
+
+Der Dispatcher normalisiert **jeden** Schlüssel beim Einlesen auf die **kanonische Form**:
+→ Bindestriche, Langform, ohne führende Dashes.
+
+Kanonisierungsschritte (in Reihenfolge):
+1. Führende `-` oder `--` entfernen
+2. Alle `_` durch `-` ersetzen
+3. Kurzform in Langform übersetzen (via `PARAM_MAPPING`)
+
+**Resultat:** `top_k`, `top-k`, `-tk` (falls definiert) – alles wird zu `top-k`.
+
+### Empfehlung für YAMLs
+
+**Bindestriche verwenden.** Der Dispatcher akzeptiert beides, aber Bindestriche entsprechen
+dem llama.cpp-Standard und sind in `debug/config` und der Datenbank so zu sehen.
+
+```yaml
+# ✅ Bevorzugt
+cache-type-k: "q8_0"
+flash-attn: true
+
+# ✅ Funktioniert auch (wird zu oben kanonisiert)
+cache_type_k: "q8_0"
+flash_attn: true
+
+# ✅ Kurzform in common:/serve: funktioniert
+ngl: 99    # → n-gpu-layers
+c: 65536   # → ctx-size
+```
+
+### Gruppen-Schlüssel (nur YAML, nicht an llama.cpp)
+
+Diese Schlüssel existieren **nicht** in llama.cpp – sie sind YAML-Komfort-Wrapper.
+Ihr Inhalt wird vor der Kanonisierung flach ausgepackt:
+
+```yaml
+sampling:         # → Inhalt wird direkt in die Parameter-Liste gepackt
+  temperature: 1.0
+  top-k: 64
+  top-p: 0.95
+
+# Äquivalent zu:
+temperature: 1.0
+top-k: 64
+top-p: 0.95
+```
+
+Gültige Gruppen-Schlüssel: `sampling`, `sampler`, `generation`, `defaults`
+
+### Vollständige Kurzform-Tabelle (PARAM_MAPPING)
+
+| Kurzform / Alias | Kanonische Langform |
+|---|---|
+| `c`, `ctx`, `context` | `ctx-size` |
+| `b` | `batch-size` |
+| `ub` | `ubatch-size` |
+| `t` | `threads` |
+| `ngl` | `n-gpu-layers` |
+| `fa` | `flash-attn` |
+| `ctk` | `cache-type-k` |
+| `ctv` | `cache-type-v` |
+| `ot`, `override_tensor`, `override-tensors` | `override-tensor` |
+| `m` | `model` |
+| `temp` | `temperature` |
+| `top_k` | `top-k` |
+| `top_p` | `top-p` |
+| `min_p` | `min-p` |
+| `repeat_penalty` | `repeat-penalty` |
+| `repeat_last_n` | `repeat-last-n` |
+| `presence_penalty` | `presence-penalty` |
+| `frequency_penalty` | `frequency-penalty` |
+| `typical_p`, `typ_p` | `typical-p` |
+| `dynatemp_range` | `dynatemp-range` |
+| `dynatemp_exp`, `dynatemp_exponent` | `dynatemp-exp` |
+| `mirostat_lr` | `mirostat-lr` |
+| `mirostat_ent` | `mirostat-ent` |
+| `dry_multiplier` | `dry-multiplier` |
+| `dry_base` | `dry-base` |
+| `dry_allowed_length` | `dry-allowed-length` |
+| `dry_penalty_last_n` | `dry-penalty-last-n` |
+| `dry_sequence_breaker` | `dry-sequence-breaker` |
+| `sampler_seq` | `sampler-seq` |
+| `sampling_seq` | `sampling-seq` |
+| `hf_repo` | `hf-repo` |
+| `hf_file` | `hf-file` |
+| `model_url` | `model-url` |
+| `model_draft` | `model-draft` |
+| `chat_template` | `chat-template` |
+| `load_on_startup` | `load-on-startup` |
+| `api_key` | `api-key` |
+
+> Alle anderen Schlüssel: `_` → `-` reicht. `cache_type_k` → `cache-type-k` automatisch.
+
+### Was mit eingehenden Request-Parametern passiert (Proxy)
+
+Wenn ein Client `temperature: 0.9` sendet und das Ensemble `temperature: 0.3` konfiguriert hat,
+**überschreibt der Proxy den Client-Wert immer**. Das ist so gewollt.
+
+Die Sampling-Parameter, die der Proxy verwaltet (und ggf. überschreibt), sind:
+
+`temperature`, `top-p`, `top-k`, `min-p`, `repeat-penalty`, `presence-penalty`,
+`frequency-penalty`, `typical-p`, `dynatemp-range`, `dynatemp-exp`, `mirostat-lr`,
+`mirostat-ent`, `dry-multiplier`, `dry-base`, `dry-allowed-length`, `dry-penalty-last-n`,
+`sampler-seq`, `repeat-last-n`
+
+**In der Datenbank** werden sie in der kanonischen Form (Bindestriche) gespeichert.
+**Im JSON-Body** an llama.cpp werden sie mit Unterstrichen geschrieben (`top_k`, `temperature`)
+– das erwartet die OpenAI-kompatible llama.cpp-API.
+
+`chat_template_kwargs` ist ein Sonderfall: er wird als Proxy-Parameter injiziert,
+erscheint aber nicht in der llama.cpp-INI.
+
+---
+
+## 15. Starten – Schnellreferenz
 
 ```bash
 # Ensemble starten (Proxy + llama.cpp)
 uv run src/dispatcher.py serve --ensemble thinkpad --instance Laptop
+uv run src/dispatcher.py serve --ensemble 3090    --instance Speedy
 
 # Nur kompilieren, nicht starten
 uv run src/dispatcher.py serve --ensemble thinkpad --instance Laptop --compile-only
@@ -460,11 +681,13 @@ curl http://localhost:8001/debug/preview \
 # Modelle sehen (wie Open WebUI)
 curl http://localhost:8001/v1/models
 
-# instances sichern
-cd instances/ && git add . && git commit -m "Update" && git push
+# Instanz sichern (Laptop)
+cd instances/Laptop && git add . && git commit -m "Update" && git push
 
-# Instanz Remote einrichten (einmalig)
-cd instances/
-git remote add origin git@github.com:<user>/llama-dispatcher-instances.git
-git push -u origin master
+# Fresh Install auf neuem Rechner (alle 3 Repos in einem Rutsch)
+git clone https://github.com/SomeSunlight/Llama_Dispatcher.git
+cd Llama_Dispatcher
+git clone https://github.com/SomeSunlight/Llama_Dispatcher_Laptop.git instances/Laptop
+git clone https://github.com/SomeSunlight/Llama_Dispatcher_Speedy.git instances/Speedy
+uv sync
 ```
