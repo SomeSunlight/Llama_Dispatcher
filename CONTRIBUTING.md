@@ -1,120 +1,120 @@
 # Contributing to the Llama Dispatcher
 
-Dieses Projekt folgt strengen Prinzipien in Bezug auf Abhängigkeiten, Konfigurations-Architektur, Proxy-Verhalten, Datenbankintegrität und beobachtbare Runtime-Transparenz.
+This project follows strict principles regarding dependencies, configuration architecture, proxy behavior, database integrity, and observable runtime transparency.
 
 ## 1. Environment & Dependencies
 
-- **Strict `uv` Usage:** Wir verwenden weder `pip`, `conda` noch `poetry` direkt. Alle Abhängigkeiten werden exklusiv über `uv add <package>` verwaltet.
-- **Isolierung:** Tests und Ausführungen erfolgen über `uv run`.
+- **Strict `uv` Usage:** We do not use `pip`, `conda`, or `poetry` directly. All dependencies are managed exclusively via `uv add <package>`.
+- **Isolation:** Tests and executions are performed using `uv run`.
 
-## 2. Instanz-Trennung
+## 2. Instance Separation
 
-Der Haupt-Code-Repo (`src/`, `defaults/`, Dokumentation) ist öffentlich. Die maschinenspezifischen Konfigurationen unter `instances/` sind **im Haupt-`.gitignore`** ausgenommen und werden als **eigenes privates Repo** verwaltet.
+The main code repository (`src/`, `defaults/`, documentation) is public. Machine-specific configurations under `instances/` are **excluded in the main `.gitignore`** and are managed as **separate private repos**.
 
-Nichts unter `instances/` darf in das öffentliche Repo aufgenommen werden – dort stehen Modellpfade, Maschinenpfade und private Betriebsdaten. Das `instances/`-Repo hat ein eigenes `.gitignore`, das `*/data/*.db` und `*/data/*.ini` (Lauf-Artefakte) ausschliesst.
+Nothing under `instances/` must be included in the public repo – it contains model paths, machine paths, and private operational data. The `instances/` repo has its own `.gitignore` that excludes `*/data/*.db` and `*/data/*.ini` (runtime artifacts).
 
-## 3. Separation of Concerns – was gehört wohin
+## 3. Separation of Concerns – Where things belong
 
-Die Konfigurations-Kaskade hat eine klare Zuständigkeitsgrenze:
+The configuration cascade has clear boundaries of responsibility:
 
-| Ebene | Ort | Zuständigkeit |
+| Level | Location | Responsibility |
 |---|---|---|
-| Modell-Defaults | `defaults/<modell>.yaml` | Hardware-agnostisches Sampling (einmal für alle Maschinen) |
-| Engine-Defaults | `instances/<name>/engines/<engine>.yaml` | Binary-Pfad, GPU-Flags (maschinenspezifisch) |
-| Profil | `instances/<name>/profiles/` | Modellpfad, Kontext, Quantisierung, Betriebsmodi |
-| Ensemble | `instances/<name>/ensembles/` | Welche Modelle, Proxy-Aliase, Sampling-Overrides |
+| Model Defaults | `defaults/<model>.yaml` | Hardware-agnostic sampling (once for all machines) |
+| Engine Defaults | `instances/<name>/engines/<engine>.yaml` | Binary path, GPU flags (machine-specific) |
+| Profile | `instances/<name>/profiles/` | Model path, context, quantization, operational modes |
+| Ensemble | `instances/<name>/ensembles/` | Which models, proxy aliases, sampling overrides |
 
-**Niemals** Engine-Flags in Profilen, Modellpfade in Engine-Dateien oder Sampling-Defaults doppelt ablegen. Jede Information existiert genau einmal an der richtigen Stelle.
+**Never** place engine flags in profiles, model paths in engine files, or duplicate sampling defaults. Every piece of information exists exactly once in the correct location.
 
-## 4. Parameter-Kanonisierung
+## 4. Parameter Canonicalization
 
-- Neue llama.cpp-Parameter müssen in `PARAM_MAPPING` in `dispatcher.py` eingetragen werden.
-- Kurzformen (`c`, `ngl`, `ctk`, `ctv`, `ot`) und Schreibvarianten (`top_p`, `top-p`) werden intern auf kanonische Langformen ohne führende Dashes gemappt.
-- JSON-Felder in der Datenbank speichern Parameter ohne führende Dashes in kanonischer Langform.
+- New llama.cpp parameters must be added to `PARAM_MAPPING` in `dispatcher.py`.
+- Shorthands (`c`, `ngl`, `ctk`, `ctv`, `ot`) and spelling variants (`top_p`, `top-p`) are internally mapped to canonical long forms without leading dashes.
+- JSON fields in the database store parameters in canonical long form without leading dashes.
 
-Wichtige Mappings:
+Important mappings:
 
 ```
 c          → ctx-size
 ngl        → n-gpu-layers
 ctk        → cache-type-k
 ctv        → cache-type-v
-ot         → override-tensor   (nicht override-kv – das ist GGUF-Metadaten)
+ot         → override-tensor   (not override-kv – that is GGUF metadata)
 top_p      → top-p
 repeat_penalty → repeat-penalty
 ```
 
-## 5. Proxy-Architektur – Grundprinzipien
+## 5. Proxy Architecture – Core Principles
 
-Der Dispatcher ist ein **vollständiger OpenAI-kompatibler Proxy**. Das ist eine bewusste Architekturentscheidung mit klaren Regeln:
+The Dispatcher is a **full OpenAI-compatible Proxy**. This is a deliberate architectural decision with clear rules:
 
-**Proxy-Werte überschreiben Client-Werte immer.** Wenn `temperature: 0.3` im Ensemble konfiguriert ist, erhält llama.cpp `0.3` – egal was der Client sendet. Das ist der Sinn der zentralen Konfiguration.
+**Proxy values always overwrite client values.** If `temperature: 0.3` is configured in the ensemble, llama.cpp receives `0.3` – regardless of what the client sends. This is the purpose of centralized configuration.
 
-**`target:` Aliase** existieren nur im Proxy, nicht in der llama.cpp-INI. Ein `target:` verweist auf einen echten Alias. Der Proxy injiziert die Sampling-Parameter des proxy-only Alias und schreibt das `model:`-Feld um. So können mehrere „Persönlichkeiten" dasselbe Modell im VRAM teilen ohne es doppelt zu laden.
+**`target:` Aliases** exist only in the proxy, not in the llama.cpp-INI. A `target:` refers to a real alias. The proxy injects the sampling parameters of the proxy-only alias and rewrites the `model:` field. This allows multiple "personalities" to share the same model in VRAM without loading it twice.
 
-**`chat_template_kwargs`** ist ein Proxy-Only-Key: Er wird nicht in die llama.cpp-INI geschrieben, aber vom Proxy in jeden Request injiziert. So kann `enable_thinking` zentral für alle Clients gesteuert werden.
+**`chat_template_kwargs`** is a Proxy-Only key: It is not written to the llama.cpp-INI, but is injected by the proxy into every request. This allows `enable_thinking` to be controlled centrally for all clients.
 
-**Keine magischen Rewrites ohne Konfiguration.** Alle Transformationen basieren auf expliziter YAML-Konfiguration im Ensemble. Der Code beschreibt nur was die Konfiguration vorgibt.
+**No magic rewrites without configuration.** All transformations are based on explicit YAML configuration in the ensemble. The code only describes what the configuration mandates.
 
-## 6. Profile und Ensembles
+## 6. Profiles and Ensembles
 
-**Profile** sind modell- und hardware-nahe Schablonen für einen Betriebsmodus. Sie können direkt gestartet werden (`serve --profile <name>`). Das ist der empfohlene Weg für Tests und Feinschliff, bevor ein Profil in ein Ensemble aufgenommen wird.
+**Profiles** are model- and hardware-near templates for an operational mode. They can be started directly (`serve --profile <name>`). This is the recommended way for testing and fine-tuning before a profile is included in an ensemble.
 
-**Ensembles** definieren den Proxy-Betrieb: welche echten Modelle in der INI stehen, welche Aliase der Proxy nach aussen sichtbar macht, und welche Parameter pro Alias injiziert werden. `model_defaults:` im Ensemble (der `[*]`-Abschnitt der INI) ist optional und nur sinnvoll für Parameter die wirklich für alle echten Modelle gelten sollen – nicht als Ersatz für `defaults/<modell>.yaml`.
+**Ensembles** define the proxy operation: which real models are in the INI, which aliases the proxy makes visible to the outside, and which parameters are injected per alias. `model_defaults:` in the ensemble (the `[*]` section of the INI) is optional and only makes sense for parameters that should truly apply to all real models – not as a replacement for `defaults/<model>.yaml`.
 
-## 7. Engine-Templates
+## 7. Engine Templates
 
-Engine-Templates unter `defaults/engine-templates/` sind Vorlagen zum Kopieren. Sie werden **nicht direkt vom Dispatcher verwendet**. Instanz-spezifische Engines unter `instances/<name>/engines/` verwenden `common:` und `serve:` Sektionen, die per deep merge in das Profil eingebettet werden.
+Engine templates under `defaults/engine-templates/` are templates for copying. They are **not used directly by the Dispatcher**. Instance-specific engines under `instances/<name>/engines/` use `common:` and `serve:` sections that are embedded into the profile via deep merge.
 
-Suchreihenfolge: `instances/<name>/engines/` → `defaults/engine-templates/` (nur als Fallback, wenn keine Instanz-Engine vorhanden).
+Search order: `instances/<name>/engines/` → `defaults/engine-templates/` (only as a fallback if no instance engine is present).
 
-## 8. Datenbank-Integrität
+## 8. Database Integrity
 
-Die aktuelle DB ist `instances/<name>/data/metrics.db`. Es gibt keine Migration von älteren Versionen; das Schema wird neu über `src/init_db.sql` aufgebaut.
+The current DB is `instances/<name>/data/metrics.db`. There is no migration from older versions; the schema is built fresh via `src/init_db.sql`.
 
-**Zeitstempel:** Timezone-aware, Format `YYYY-MM-DD HH:MM:SS+HH:MM`. Direkt lesbar, sortierbar, UTC-korrekt.
+**Timestamps:** Timezone-aware, format `YYYY-MM-DD HH:MM:SS+HH:MM`. Directly readable, sortable, and UTC-correct.
 
-`execution_runs` ist der historische Lauf-Kopf und wird nach dem Schreiben nicht verändert.
+`execution_runs` is the historical run header and is not modified after being written.
 
-Für Schema-Evolution:
-- Keine destruktiven Updates an bestehenden Messdaten.
-- `PRAGMA user_version` verwenden.
-- Migrationen kontrolliert in `database_manager.py` abbilden.
+For schema evolution:
+- No destructive updates to existing measurement data.
+- Use `PRAGMA user_version`.
+- Map migrations in a controlled manner in `database_manager.py`.
 
-## 9. Runtime-Instanzen sind Pflicht
+## 9. Runtime Instances are Mandatory
 
-- Ein `execution_run` → der Hauptprozess.
-- Eine `serve_model_instance` → pro effektiv geladenem Modell.
-- `metrics_serve` verweist auf **beide** (historische Klammer + konkrete Modellherkunft).
+- An `execution_run` → the main process.
+- A `serve_model_instance` → per effectively loaded model.
+- `metrics_serve` refers to **both** (historical wrapper + specific model origin).
 
-Auch im Einzelprofil-Modus muss genau eine Runtime-Instanz erfasst werden. Das macht Auswertungen homogen zwischen Einzel- und Ensemble-Modus.
+Even in Single Profile Mode, exactly one runtime instance must be recorded. This makes evaluations homogeneous between single and ensemble modes.
 
-## 10. Proxy-Requests werden geloggt
+## 10. Proxy Requests are Logged
 
-Der Proxy loggt **jeden** durchgeleiteten Request in `proxy_requests`:
-- Endpoint, angefordetes Modell, Stream-Flag
-- Injizierte Parameter (als JSON)
-- Token-Counts (Prompt + Completion)
-- Latenz, TTFT, Status-Code, finish_reason
-- `req_enable_thinking` (aus `chat_template_kwargs`)
+The proxy logs **every** forwarded request in `proxy_requests`:
+- Endpoint, requested model, stream flag
+- Injected parameters (as JSON)
+- Token counts (Prompt + Completion)
+- Latency, TTFT, status code, finish_reason
+- `req_enable_thinking` (from `chat_template_kwargs`)
 
-Das ist die einzige Stelle wo Client-Request-Parameter beobachtet werden – weil der Dispatcher als Proxy dazwischenliegt. llama.cpp selbst sieht nur das bereits transformierte Request.
+This is the only place where client request parameters are observed – because the Dispatcher acts as a proxy in between. llama.cpp itself only sees the already transformed request.
 
-## 11. FastAPI und Asynchronität
+## 11. FastAPI and Asynchronicity
 
-- Externe Payloads für FastAPI-Endpunkte müssen über Pydantic-Modelle oder explizite Validierung geprüft werden.
-- Keine blockierenden Aufrufe (`time.sleep`, `subprocess.run`) im Orchestrator.
-- Subprozesse asynchron starten und Logs asynchron lesen.
+- External payloads for FastAPI endpoints must be verified via Pydantic models or explicit validation.
+- No blocking calls (`time.sleep`, `subprocess.run`) in the orchestrator.
+- Start subprocesses asynchronously and read logs asynchronously.
 
-## 12. Metriken und Fehlerbalken
+## 12. Metrics and Error Bars
 
-- `metrics_bench.speed_error` ist Pflicht.
-- `metrics_eval.perplexity_error` ist Pflicht, soweit verfügbar.
-- Keine Messung ohne Fehlerwert wenn Wiederholungen verfügbar sind.
+- `metrics_bench.speed_error` is mandatory.
+- `metrics_eval.perplexity_error` is mandatory, where available.
+- No measurement without an error value if repetitions are available.
 
-## 13. Entwicklungsstil
+## 13. Development Style
 
-- Kleine, nachvollziehbare Änderungen bevorzugen.
-- Beobachtete, deklarierte und unbekannte Fakten strikt trennen.
-- Konfiguration beschreibt Absicht; Code setzt sie um – nie umgekehrt.
-- Neue Features zuerst mit `--compile-only` oder `/debug/preview` testbar machen.
+- Prefer small, understandable changes.
+- Strictly separate observed, declared, and unknown facts.
+- Configuration describes intent; code implements it – never the other way around.
+- Make new features testable first with `--compile-only` or `/debug/preview`.

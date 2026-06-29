@@ -1,76 +1,76 @@
 # Llama Dispatcher
 
-Ein asynchroner Orchestrator und intelligenter Proxy für `llama.cpp`. Der Dispatcher übernimmt zwei klar getrennte Aufgaben:
+An asynchronous orchestrator and intelligent proxy for `llama.cpp`. The Dispatcher performs two clearly separated tasks:
 
-1. **llama.cpp verwalten** – Profile und Ensembles zu offiziellen llama.cpp-Parametern kompilieren, den Server starten, Metriken erfassen.
-2. **Als Proxy agieren** – Clients sehen eigene Modell-Aliase mit einheitlich gesetzten Parametern. Der Dispatcher nimmt Anfragen entgegen, injiziert die konfigurierten Parameter und leitet an llama.cpp weiter.
+1. **Manage llama.cpp** – Compiles profiles and ensembles into official llama.cpp parameters, starts the server, and collects metrics.
+2. **Act as a Proxy** – Clients see their own model aliases with uniformly set parameters. The Dispatcher receives requests, injects the configured parameters, and forwards them to llama.cpp.
 
-Diese Trennung ermöglicht: ein einziges Modell im VRAM, aber mehrere „Persönlichkeiten" für verschiedene Clients – zentral konfiguriert, nicht im Client.
-
----
-
-## Inhaltsverzeichnis
-
-1. [Grundidee und Separation of Concerns](#1-grundidee-und-separation-of-concerns)
-2. [Verzeichnisstruktur](#2-verzeichnisstruktur)
-3. [Instanz-Konzept und Git-Trennung](#3-instanz-konzept-und-git-trennung)
-4. [Konfigurations-Kaskade](#4-konfigurations-kaskade)
-5. [Profil-Struktur](#5-profil-struktur)
-6. [Engine-Templates und Instanz-Engines](#6-engine-templates-und-instanz-engines)
-7. [Ensemble-Struktur](#7-ensemble-struktur)
-8. [Der Proxy – Modell-Aliase und Parameter-Injektion](#8-der-proxy--modell-aliase-und-parameter-injektion)
-9. [Debug-Endpoints](#9-debug-endpoints)
-10. [Serve-Modi](#10-serve-modi)
-11. [Bench und Eval](#11-bench-und-eval)
-12. [Datenbank](#12-datenbank)
-13. [CLI-Referenz](#13-cli-referenz)
-14. [Parameternamen-System](#14-parameternamen-system)
-15. [Starten – Schnellreferenz](#15-starten--schnellreferenz)
+This separation enables: a single model in VRAM, but multiple "personalities" for different clients – centrally configured, not in the client.
 
 ---
 
-## 1. Grundidee und Separation of Concerns
+## Table of Contents
 
-Der Dispatcher trennt strikt was zusammen, was getrennt sein muss:
+1. [Core Idea and Separation of Concerns](#1-core-idea-and-separation-of-concerns)
+2. [Directory Structure](#2-directory-structure)
+3. [Instance Concept and Git Separation](#3-instance-concept-and-git-separation)
+4. [Configuration Cascade](#4-configuration-cascade)
+5. [Profile Structure](#5-profile-structure)
+6. [Engine Templates and Instance Engines](#6-engine-templates-and-instance-engines)
+7. [Ensemble Structure](#7-ensemble-structure)
+8. [The Proxy – Model Aliases and Parameter Injection](#8-the-proxy--model-aliases-and-parameter-injection)
+9. [Debug Endpoints](#9-debug-endpoints)
+10. [Serve Modes](#10-serve-modes)
+11. [Bench and Eval](#11-bench-and-eval)
+12. [Database](#12-database)
+13. [CLI Reference](#13-cli-reference)
+14. [Parameter Naming System](#14-parameter-naming-system)
+15. [Starting – Quick Reference](#15-starting--quick-reference)
 
-| Ebene | Datei/Ort | Was steht dort |
+---
+
+## 1. Core Idea and Separation of Concerns
+
+The Dispatcher strictly separates what must be together from what must be separate:
+
+| Level | File/Location | Content |
 |---|---|---|
-| Modell-Defaults | `defaults/<modell>.yaml` | Sampling, hardware-agnostisch (z. B. Gemma-Empfehlungen) |
-| Engine-Defaults | `instances/<name>/engines/<engine>.yaml` | Binär-Pfad, GPU-Flags (maschinenspezifisch) |
-| Profil | `instances/<name>/profiles/<name>.yaml` | Modellpfad, Kontext, Quantisierung, Betriebsparameter |
-| Ensemble | `instances/<name>/ensembles/<name>.yaml` | Welche Modelle, welche Aliase, welche Sampling-Overrides |
-| Dispatcher-Code | `src/dispatcher.py` | Kompilierung, Proxy-Logik, Metriken |
-| Instanz-Daten | `instances/<name>/data/` | SQLite-Datenbank (lokal, nicht im Repo) |
+| Model Defaults | `defaults/<model>.yaml` | Sampling, hardware-agnostic (e.g., Gemma recommendations) |
+| Engine Defaults | `instances/<name>/engines/<engine>.yaml` | Binary path, GPU flags (machine-specific) |
+| Profile | `instances/<name>/profiles/<name>.yaml` | Model path, context, quantization, operational parameters |
+| Ensemble | `instances/<name>/ensembles/<name>.yaml` | Which models, which aliases, which sampling overrides |
+| Dispatcher Code | `src/dispatcher.py` | Compilation, proxy logic, metrics |
+| Instance Data | `instances/<name>/data/` | SQLite database (local, not in repo) |
 
-**Für den Betrieb gilt:** Wer ein Ensemble konfiguriert, muss nur die Ensemble-Datei anfassen. Wer die Hardware wechselt, passt die Engine-Datei an. Wer Sampling-Defaults ändert, bearbeitet `defaults/<modell>.yaml`.
+**For operation:** Whoever configures an ensemble only needs to touch the ensemble file. Whoever changes the hardware adjusts the engine file. Whoever changes sampling defaults edits `defaults/<model>.yaml`.
 
 ---
 
-## 2. Verzeichnisstruktur
+## 2. Directory Structure
 
 ```
 Llama_Dispatcher/
 ├── src/
 │   └── dispatcher.py          # Orchestrator + Proxy + API
 ├── defaults/
-│   ├── gemma.yaml             # Gemma Sampling-Defaults (serve-Sektion)
-│   ├── llama.yaml             # Llama Sampling-Defaults
-│   ├── qwen.yaml              # Qwen Sampling-Defaults
-│   └── engine-templates/      # Vorlagen zum Kopieren nach instances/<name>/engines/
+│   ├── gemma.yaml             # Gemma Sampling Defaults (serve section)
+│   ├── llama.yaml             # Llama Sampling Defaults
+│   ├── qwen.yaml              # Qwen Sampling Defaults
+│   └── engine-templates/      # Templates to copy to instances/<name>/engines/
 │       ├── cuda.yaml
 │       ├── vulkan.yaml
 │       └── sycl.yaml
-├── instances/                 # NICHT im Haupt-Repo (separates privates Git)
+├── instances/                 # NOT in the main repo (separate private Git)
 │   ├── Laptop/
 │   │   ├── instance.yaml      # machine_guid, nickname
 │   │   ├── engines/
-│   │   │   └── vulkan.yaml    # bin_dir + GPU-Flags für diesen Rechner
+│   │   │   └── vulkan.yaml    # bin_dir + GPU flags for this machine
 │   │   ├── ensembles/
 │   │   │   └── thinkpad.yaml
 │   │   ├── profiles/
 │   │   │   └── Thinkpad_vulkan_gemma_26B_A4B.yaml
 │   │   └── data/
-│   │       └── metrics.db     # SQLite (nicht versioniert)
+│   │       └── metrics.db     # SQLite (not versioned)
 │   └── Speedy/
 │       ├── instance.yaml
 │       ├── engines/
@@ -84,111 +84,111 @@ Llama_Dispatcher/
 
 ---
 
-## 3. Instanz-Konzept und Git-Trennung
+## 3. Instance Concept and Git Separation
 
-Jede Maschine ist eine **Instanz** unter `instances/<name>/`. Der Haupt-Dispatcher-Code ist öffentlich auf GitHub; die Instanzen enthalten Maschinenpfade, Modellpfade und private Daten – diese gehören **nicht** ins öffentliche Repo.
+Each machine is an **Instance** under `instances/<name>/`. The main Dispatcher code is public on GitHub; instances contain machine paths, model paths, and private data – these do **not** belong in the public repo.
 
-**Lösung:** `instances/` ist im Haupt-`.gitignore` ausgenommen. Jede Instanz ist ein **eigenes privates Git-Repo**:
+**Solution:** `instances/` is excluded in the main `.gitignore`. Each instance is its **own private Git repo**:
 
-| Repo | Sichtbarkeit | Inhalt |
+| Repo | Visibility | Content |
 |---|---|---|
-| `SomeSunlight/Llama_Dispatcher` | öffentlich | Code, Defaults, Dokumentation |
-| `SomeSunlight/Llama_Dispatcher_Laptop` | privat | Laptop-Profile, Engines, Ensembles |
-| `SomeSunlight/Llama_Dispatcher_Speedy` | privat | Speedy-Profile, Engines, Ensembles |
+| `SomeSunlight/Llama_Dispatcher` | Public | Code, Defaults, Documentation |
+| `SomeSunlight/Llama_Dispatcher_Laptop` | Private | Laptop profiles, Engines, Ensembles |
+| `SomeSunlight/Llama_Dispatcher_Speedy` | Private | Speedy profiles, Engines, Ensembles |
 
-### Fresh Install auf neuem Rechner
+### Fresh Install on a New Machine
 
-Der Trick beim Klonen: `git clone <url> <zielverzeichnis>` erlaubt einen eigenen Ordnernamen –
-so landet die Instanz direkt im richtigen Unterverzeichnis, ohne dass der GitHub-Reponame stört.
+The trick when cloning: `git clone <url> <target_directory>` allows a custom folder name –
+so the instance lands directly in the correct subdirectory without the GitHub repo name interfering.
 
 ```powershell
-# Schritt 1: Hauptrepo klonen
+# Step 1: Clone main repo
 git clone https://github.com/SomeSunlight/Llama_Dispatcher.git
 cd Llama_Dispatcher
 
-# Schritt 2: Instanz-Repos in die EXAKT richtigen Unterverzeichnisse klonen
+# Step 2: Clone instance repos into the EXACT correct subdirectories
 git clone https://github.com/SomeSunlight/Llama_Dispatcher_Laptop.git instances/Laptop
 git clone https://github.com/SomeSunlight/Llama_Dispatcher_Speedy.git instances/Speedy
 
-# Schritt 3: Python-Umgebung
+# Step 3: Python environment
 uv sync
 ```
 
-Nach dem Klonen `instance.yaml` prüfen: die `machine_guid` identifiziert die Maschine eindeutig
-in der Metrics-Datenbank. Auf einem neuen Gerät eine neue GUID eintragen oder mit `--instance NeuerName`
-eine frische Instanz anlegen (wird automatisch erstellt).
+After cloning, check `instance.yaml`: the `machine_guid` uniquely identifies the machine
+in the metrics database. On a new device, enter a new GUID or use `--instance NewName`
+to create a fresh instance (created automatically).
 
-### Täglicher Workflow nach Konfigurationsänderungen
+### Daily Workflow after Configuration Changes
 
 ```bash
-# Laptop-Instanz sichern
+# Backup Laptop instance
 cd instances/Laptop
 git add .
-git commit -m "thinkpad: neuen Agent-Alias konfiguriert"
+git commit -m "thinkpad: new agent alias configured"
 git push
 
-# Speedy-Instanz sichern
+# Backup Speedy instance
 cd instances/Speedy
 git add .
-git commit -m "3090: Kontext erhöht"
+git commit -m "3090: context increased"
 git push
 ```
 
-### Was `--instance` bewirkt
+### What `--instance` does
 
 ```bash
 uv run src/dispatcher.py serve --ensemble thinkpad --instance Laptop
 ```
 
-Mit `--instance Laptop` zeigt der Dispatcher auf `instances/Laptop/profiles|ensembles|data/`
-und liest die `machine_guid` aus `instances/Laptop/instance.yaml`.
+With `--instance Laptop`, the Dispatcher points to `instances/Laptop/profiles|ensembles|data/`
+and reads the `machine_guid` from `instances/Laptop/instance.yaml`.
 
-**Ohne `--instance`** läuft der Dispatcher im **Legacy-Modus**: er sucht Profile und Ensembles
-direkt unter `profiles/` und `ensembles/` im Projektroot – **kein Prompt**, kein Fehler, nur
-falscher Pfad. Wer die Instanzstruktur nutzt, muss `--instance` immer angeben.
+**Without `--instance`**, the Dispatcher runs in **Legacy Mode**: it searches for profiles and ensembles
+directly under `profiles/` and `ensembles/` in the project root – **no prompt**, no error, just
+the wrong path. Anyone using the instance structure must always specify `--instance`.
 
-Existiert die angegebene Instanz noch nicht, legt der Dispatcher sie automatisch an
-(leere Verzeichnisse, neue `machine_guid` in `instance.yaml`).
+If the specified instance does not exist yet, the Dispatcher creates it automatically
+(empty directories, new `machine_guid` in `instance.yaml`).
 
 ---
 
-## 4. Konfigurations-Kaskade
+## 4. Configuration Cascade
 
-Beim Laden eines Profils werden vier Schichten zusammengeführt (**deep merge**, spätere Schichten überschreiben frühere):
+When loading a profile, four layers are merged (**deep merge**, later layers overwrite earlier ones):
 
 ```
-defaults/<modell>.yaml          (1. Modell-Defaults: Sampling, hardware-agnostisch)
+defaults/<model>.yaml               (1. Model Defaults: Sampling, hardware-agnostic)
         ↓ deep-merge
-instances/<name>/engines/<engine>.yaml  (2. Engine-Defaults: bin_dir, GPU-Flags)
+instances/<name>/engines/<engine>.yaml (2. Engine Defaults: bin_dir, GPU flags)
         ↓ deep-merge
-instances/<name>/profiles/<name>.yaml   (3. Profil: Modellpfad, Kontext, Betriebsparameter)
-        ↓ deep-merge (inline, höchste Priorität)
-Ensemble-Modell-Eintrag         (4. Ensemble: Alias, Sampling-Overrides, load-on-startup)
+instances/<name>/profiles/<name>.yaml  (3. Profile: Model path, context, operational parameters)
+        ↓ deep-merge (inline, highest priority)
+Ensemble Model Entry                (4. Ensemble: Alias, Sampling overrides, load-on-startup)
 ```
 
-Das Profil referenziert die Schichten 1 und 2 explizit:
+The profile explicitly references layers 1 and 2:
 ```yaml
 defaults:
   model: "gemma"    # → defaults/gemma.yaml
   engine: "vulkan"  # → instances/Laptop/engines/vulkan.yaml
 ```
 
-**Konsequenz:** Sampling-Defaults stehen genau einmal in `defaults/gemma.yaml`. Vulkan-spezifische Flags stehen genau einmal in `engines/vulkan.yaml`. Das Profil enthält nur was wirklich modellspezifisch ist.
+**Consequence:** Sampling defaults exist exactly once in `defaults/gemma.yaml`. Vulkan-specific flags exist exactly once in `engines/vulkan.yaml`. The profile only contains what is truly model-specific.
 
 ---
 
-## 5. Profil-Struktur
+## 5. Profile Structure
 
-Profile beschreiben ein Modell auf einer bestimmten Hardware. Sie haben drei Betriebsmodus-Sektionen (`serve`, `bench`, `eval`) und eine gemeinsame Sektion (`common`).
+Profiles describe a model on specific hardware. They have three operational mode sections (`serve`, `bench`, `eval`) and one common section (`common`).
 
 ```yaml
 # instances/Laptop/profiles/Thinkpad_vulkan_gemma_26B_A4B.yaml
 name: "Thinkpad_vulkan_gemma_26B_A4B"
-description: "Gemma 4 26B QAT, Vulkan-Build, reduzierter Kontext"
+description: "Gemma 4 26B QAT, Vulkan build, reduced context"
 
 defaults:
-  model: "gemma"    # → defaults/gemma.yaml  (Sampling-Defaults)
-  engine: "vulkan"  # → instances/Laptop/engines/vulkan.yaml  (bin_dir, GPU-Flags)
+  model: "gemma"    # → defaults/gemma.yaml  (Sampling Defaults)
+  engine: "vulkan"  # → instances/Laptop/engines/vulkan.yaml  (bin_dir, GPU flags)
 
 common:
   m: "C:\\AI_Models\\gemma-4-26B.gguf"
@@ -202,11 +202,11 @@ serve:
   batch-size: 2048
   parallel: 1
   cont-batching: true
-  jinja: true       # Pflicht für Gemma 4
-  port: 8081        # Fallback wenn nicht im Ensemble definiert
+  jinja: true       # Required for Gemma 4
+  port: 8081        # Fallback if not defined in Ensemble
   host: "0.0.0.0"
   ctx-checkpoints: 0
-  # no-kv-offload und cache-ram kommen aus engines/vulkan.yaml
+  # no-kv-offload and cache-ram come from engines/vulkan.yaml
 
 bench:
   r: 1
@@ -218,73 +218,73 @@ bench:
 eval:
   c: 8192
   b: 512
-  ot: null   # entfernt das override-tensor-Flag für Perplexity
+  ot: null   # removes the override-tensor flag for Perplexity
 ```
 
-**Kurzformen** werden kanonisiert: `m` → `model`, `c` → `ctx-size`, `ngl` → `n-gpu-layers`, `ctk` → `cache-type-k`, `ot` → `override-tensor`.
+**Shorthands** are canonized: `m` → `model`, `c` → `ctx-size`, `ngl` → `n-gpu-layers`, `ctk` → `cache-type-k`, `ot` → `override-tensor`.
 
 ---
 
-## 6. Engine-Templates und Instanz-Engines
+## 6. Engine Templates and Instance Engines
 
-Engine-Dateien trennen was binär-/hardware-spezifisch ist vom Modell. Sie werden per **deep merge** in die `common:` und `serve:` Sektionen des Profils eingebettet.
+Engine files separate what is binary/hardware-specific from the model. They are embedded into the `common:` and `serve:` sections of the profile via **deep merge**.
 
-**Template** (Vorlage unter `defaults/engine-templates/`):
+**Template** (Template under `defaults/engine-templates/`):
 ```yaml
-# defaults/engine-templates/vulkan.yaml  – NUR Vorlage, nicht direkt verwendet
+# defaults/engine-templates/vulkan.yaml  – ONLY a template, not used directly
 bin_dir: "c:\\llama-cpp\\server\\server_vulkan"
 ```
 
-**Instanz-spezifische Engine** (nach dem Template-Kopieren anpassen):
+**Instance-specific Engine** (Adjust after copying the template):
 ```yaml
 # instances/Laptop/engines/vulkan.yaml
 bin_dir: "c:\\llama.cpp\\server\\server_06_vulcan"
 
 common:
-  n-gpu-layers: 99   # alle Layer auf GPU
-  split-mode: none   # kein Multi-GPU
+  n-gpu-layers: 99   # all layers on GPU
+  split-mode: none   # no Multi-GPU
   main-gpu: 0
   flash-attn: on
 
 serve:
-  no-kv-offload: true  # Vulkan unterstützt kein KV-Offloading
-  cache-ram: 0         # verhindert Vulkan-spezifische Abstürze
+  no-kv-offload: true  # Vulkan does not support KV-offloading
+  cache-ram: 0         # prevents Vulkan-specific crashes
 ```
 
-Suchreihenfolge: `instances/<name>/engines/` → `defaults/engine-templates/` (Fallback).
+Search order: `instances/<name>/engines/` → `defaults/engine-templates/` (fallback).
 
 ---
 
-## 7. Ensemble-Struktur
+## 7. Ensemble Structure
 
-Ensembles definieren welche Modelle gemeinsam im llama.cpp-Router angeboten werden, und welche Modell-Aliase der **Proxy** nach aussen sichtbar macht.
+Ensembles define which models are offered together in the llama.cpp router, and which model aliases the **Proxy** makes visible to the outside.
 
 ```yaml
 # instances/Laptop/ensembles/thinkpad.yaml
 
 defaults:
-  engine: "vulkan"   # → instances/Laptop/engines/vulkan.yaml  (für bin_dir)
+  engine: "vulkan"   # → instances/Laptop/engines/vulkan.yaml  (for bin_dir)
 
 dispatcher:
-  port: 8001         # Dispatcher-Proxy-Port (Clients zeigen hierher)
+  port: 8001         # Dispatcher-Proxy port (clients point here)
 
 engine:
-  port: 8081         # llama.cpp-Server-Port (intern, Dispatcher leitet dorthin)
+  port: 8081         # llama.cpp-server port (internal, Dispatcher forwards there)
   host: "0.0.0.0"
   models_max: 1
 
 models:
-  # Echtes llama.cpp-Modell (belegt VRAM)
+  # Real llama.cpp model (occupies VRAM)
   - profile: "Thinkpad_vulkan_gemma_26B_A4B"
-    alias: "sparringpartner"
+    alias: "Sparringpartner"
     load-on-startup: true
     chat_template_kwargs:
       enable_thinking: true
 
-  # Proxy-only Alias: kein VRAM, leitet auf "sparringpartner" weiter
+  # Proxy-only Alias: no VRAM, forwards to "Sparringpartner"
   - profile: "Thinkpad_vulkan_gemma_26B_A4B"
     alias: "agent"
-    target: "sparringpartner"
+    target: "Sparringpartner"
     chat_template_kwargs:
       enable_thinking: false
     sampling:
@@ -295,83 +295,83 @@ models:
       repeat_penalty: 1.1
 ```
 
-**Schlüsselkonzepte:**
+**Key Concepts:**
 
-| Feld | Bedeutung |
+| Field | Meaning |
 |---|---|
-| `defaults.engine` | Liest `bin_dir` aus der Instanz-Engine-Datei |
-| `dispatcher.port` | Port des Dispatcher-Proxys (Clients) |
-| `engine.port` | Port von llama.cpp (intern) |
-| `target: "alias"` | Proxy-only: kein INI-Eintrag, wird auf Ziel-Alias umgeschrieben |
-| `chat_template_kwargs` | Wird vom Proxy in jeden Request injiziert (z. B. `enable_thinking`) |
-| `sampling:` | Sampling-Parameter, die der Proxy injiziert und überschreibt |
+| `defaults.engine` | Reads `bin_dir` from the instance engine file |
+| `dispatcher.port` | Port of the Dispatcher-Proxy (clients) |
+| `engine.port` | Port of llama.cpp (internal) |
+| `target: "alias"` | Proxy-only: no INI entry, rewritten to target alias |
+| `chat_template_kwargs` | Injected by the Proxy into every request (e.g., `enable_thinking`) |
+| `sampling:` | Sampling parameters that the Proxy injects and overrides |
 
 ---
 
-## 8. Der Proxy – Modell-Aliase und Parameter-Injektion
+## 8. The Proxy – Model Aliases and Parameter Injection
 
-Der Dispatcher ist ein **vollständiger OpenAI-kompatibler Proxy**. Clients zeigen auf `http://<host>:8001/v1/` statt direkt auf llama.cpp.
+The Dispatcher is a **full OpenAI-compatible Proxy**. Clients point to `http://<host>:8001/v1/` instead of directly to llama.cpp.
 
-### Was der Proxy macht
+### What the Proxy does
 
-Für jeden eingehenden Request:
+For every incoming request:
 
-1. **Alias-Lookup**: Findet die konfigurierten Parameter für das angeforderte Modell (`model: "agent"`)
-2. **Sampling-Injektion**: Injiziert `temperature`, `top_p`, `top_k`, `min_p`, `repeat_penalty`, `chat_template_kwargs` – **Proxy-Werte überschreiben Client-Werte immer**
-3. **Alias-Remapping** (bei `target:`): Schreibt `model: "agent"` → `model: "sparringpartner"` um
-4. **Weiterleitung** an llama.cpp (Port 8081)
-5. **Logging**: Endpoint, Modell, Tokens, Latenz, TTFT in SQLite
+1. **Alias Lookup**: Finds the configured parameters for the requested model (`model: "agent"`)
+2. **Sampling Injection**: Injects `temperature`, `top_p`, `top_k`, `min_p`, `repeat_penalty`, `chat_template_kwargs` – **Proxy values always overwrite client values**
+3. **Alias Remapping** (with `target:`): Rewrites `model: "agent"` → `model: "Sparringpartner"`
+4. **Forwarding** to llama.cpp (Port 8081)
+5. **Logging**: Endpoint, model, tokens, latency, TTFT in SQLite
 
-### Was Clients sehen
+### What Clients See
 
 ```
 GET http://localhost:8001/v1/models
-→ ["sparringpartner", "agent"]   ← beide sichtbar, ein Modell im VRAM
+→ ["Sparringpartner", "agent"]   ← both visible, one model in VRAM
 ```
 
-### Datenfluss
+### Data Flow
 
 ```
 Open WebUI / Goose / curl
   POST /v1/chat/completions  { "model": "agent", "temperature": 0.9, ... }
         ↓
 Dispatcher (Port 8001):
-  → Sampling für "agent" laden: temp=0.3, top_k=20, enable_thinking=false
-  → temperature: 0.9 → 0.3  (Proxy überschreibt)
-  → model: "agent" → "sparringpartner"  (Remapping)
-  → Weiterleitung: { "model": "sparringpartner", "temperature": 0.3, ... }
+  → Load sampling for "agent": temp=0.3, top_k=20, enable_thinking=false
+  → temperature: 0.9 → 0.3  (Proxy overwrites)
+  → model: "agent" → "Sparringpartner"  (Remapping)
+  → Forwarding: { "model": "Sparringpartner", "temperature": 0.3, ... }
         ↓
-llama.cpp (Port 8081): kennt nur [sparringpartner] – ein Modell, keine Swaps
+llama.cpp (Port 8081): knows only [Sparringpartner] – one model, no swaps
 ```
 
-### Warum das sinnvoll ist
+### Why this makes sense
 
-- **Einheitlichkeit**: Alle Clients erhalten dieselben Parameter, unabhängig davon was sie senden
-- **VRAM-Effizienz**: Mehrere Aliase, ein Modell – kein ständiges Laden/Entladen
-- **Konfiguration zentral**: Thinking an/aus, Sampling-Modus – alles in der Ensemble-Datei, nicht im Client
+- **Consistency**: All clients receive the same parameters, regardless of what they send
+- **VRAM Efficiency**: Multiple aliases, one model – no constant loading/unloading
+- **Centralized Configuration**: Thinking on/off, sampling mode – all in the ensemble file, not in the client
 
 ---
 
-## 9. Debug-Endpoints
+## 9. Debug Endpoints
 
-Während der Dispatcher läuft, stehen zwei Debug-Endpoints zur Verfügung:
+While the Dispatcher is running, two debug endpoints are available:
 
 ### `GET /debug/config`
 
-Zeigt die aktuelle Proxy-Konfiguration:
+Shows the current proxy configuration:
 
 ```bash
 curl http://localhost:8001/debug/config
 ```
 
-Antwort:
+Response:
 ```json
 {
   "status": "running",
   "llama_port": 8081,
   "aliases": [
     {
-      "alias": "sparringpartner",
+      "alias": "Sparringpartner",
       "type": "real",
       "target": null,
       "injected_params": {"temperature": 1.0, "chat_template_kwargs": {"enable_thinking": true}}
@@ -379,7 +379,7 @@ Antwort:
     {
       "alias": "agent",
       "type": "proxy-only",
-      "target": "sparringpartner",
+      "target": "Sparringpartner",
       "injected_params": {"temperature": 0.3, "chat_template_kwargs": {"enable_thinking": false}}
     }
   ]
@@ -388,58 +388,58 @@ Antwort:
 
 ### `POST /debug/preview`
 
-Simuliert die Proxy-Transformation **ohne Weiterleitung** – ideal zum Testen vor dem echten Start:
+Simulates the proxy transformation **without forwarding** – ideal for testing before an actual start:
 
 ```bash
 curl http://localhost:8001/debug/preview \
   -H "Content-Type: application/json" \
-  -d '{"model":"agent","messages":[{"role":"user","content":"Hallo"}],"temperature":0.9}'
+  -d '{"model":"agent","messages":[{"role":"user","content":"Hello"}],"temperature":0.9}'
 ```
 
-Antwort zeigt:
+Response shows:
 - `original_model` vs. `forwarded_model`
-- `injected_params`: was injiziert wurde und was der Client gesendet hatte
-- `overridden_by_client`: was der Client wollte aber überschrieben wurde
-- `forwarded_body`: der vollständige Body der an llama.cpp gehen würde
+- `injected_params`: what was injected and what the client sent
+- `overridden_by_client`: what the client wanted but was overwritten
+- `forwarded_body`: the full body that would go to llama.cpp
 
-### Compile-only (ohne Server-Start)
+### Compile-only (without starting the server)
 
 ```bash
 uv run src/dispatcher.py serve --ensemble thinkpad --instance Laptop --compile-only
 ```
 
-Zeigt die generierte INI und den llama.cpp-Startbefehl, startet aber nichts.
+Shows the generated INI and the llama.cpp start command, but starts nothing.
 
 ---
 
-## 10. Serve-Modi
+## 10. Serve Modes
 
-### Ensemble-Modus (Standard für den Betrieb)
+### Ensemble Mode (Standard for operation)
 
 ```bash
 uv run src/dispatcher.py serve --ensemble thinkpad --instance Laptop
 ```
 
-Ablauf:
-1. Liest `instances/Laptop/ensembles/thinkpad.yaml`
-2. Lädt Profile, merged Engine-Defaults und Modell-Defaults (Kaskade)
-3. Schreibt `instances/Laptop/data/thinkpad_models.ini`
-4. Startet llama.cpp: `llama-server --models-preset thinkpad_models.ini ...`
-5. Startet Dispatcher-Proxy auf Port 8001
+Workflow:
+1. Reads `instances/Laptop/ensembles/thinkpad.yaml`
+2. Loads profiles, merges Engine Defaults and Model Defaults (Cascade)
+3. Writes `instances/Laptop/data/thinkpad_models.ini`
+4. Starts llama.cpp: `llama-server --models-preset thinkpad_models.ini ...`
+5. Starts Dispatcher-Proxy on Port 8001
 
-Der Dispatcher-Port wird aus `ensemble.dispatcher.port` gelesen; `--api-port` auf der CLI überschreibt ihn.
+The Dispatcher port is read from `ensemble.dispatcher.port`; `--api-port` on the CLI overrides it.
 
-### Einzelprofil-Modus (für Tests und Feinschliff)
+### Single Profile Mode (for testing and fine-tuning)
 
 ```bash
 uv run src/dispatcher.py serve --profile Thinkpad_vulkan_gemma_26B_A4B --instance Laptop
 ```
 
-Startet llama.cpp direkt aus dem Profil, ohne Router-INI. Kein Proxy-Aliasing.
+Starts llama.cpp directly from the profile, without the router-INI. No proxy aliasing.
 
 ---
 
-## 11. Bench und Eval
+## 11. Bench and Eval
 
 ```bash
 uv run src/dispatcher.py bench --profile Thinkpad_vulkan_gemma_26B_A4B --instance Laptop
@@ -447,157 +447,150 @@ uv run src/dispatcher.py eval  --profile Thinkpad_vulkan_gemma_26B_A4B --instanc
     --dataset data/wikitext-2-raw.txt
 ```
 
-`MAX_CONTEXT` in `bench.pg` wird zur Laufzeit auf `ctx-size - tg` berechnet.
+`MAX_CONTEXT` in `bench.pg` is calculated at runtime as `ctx-size - tg`.
 
 ---
 
-## 12. Datenbank
+## 12. Database
 
-Pro Instanz: `instances/<name>/data/metrics.db` (nicht versioniert).
+Per instance: `instances/<name>/data/metrics.db` (not versioned).
 
-### Tabellen
+### Tables
 
-| Tabelle | Inhalt |
+| Table | Content |
 |---|---|
-| `execution_runs` | Ein Eintrag pro Server-Start (Ensemble/Profil, Version, CLI, INI-Hash) |
-| `serve_model_instances` | Eine Instanz pro geladenem Modell (deklarierte + effektive Parameter) |
-| `metrics_serve` | Ein Eintrag pro abgeschlossener Anfrage (Tokens, Speed, TTFT, Sampling-Params) |
-| `metrics_lifecycle` | Load/Evict/Unload-Events |
-| `metrics_bench` | Benchmark-Ergebnisse mit Fehlerbalken |
-| `metrics_eval` | Perplexity-Ergebnisse |
-| `proxy_requests` | Proxy-Log: Endpoint, Modell, injizierte Params, Tokens, Latenz, TTFT |
+| `execution_runs` | One entry per server start (Ensemble/Profile, Version, CLI, INI-Hash) |
+| `serve_model_instances` | One instance per loaded model (declared + effective parameters) |
+| `metrics_serve` | One entry per completed request (Tokens, Speed, TTFT, Sampling-Params) |
+| `metrics_lifecycle` | Load/Evict/Unload events |
+| `metrics_bench` | Benchmark results with error bars |
+| `metrics_eval` | Perplexity results |
+| `proxy_requests` | Proxy log: Endpoint, model, injected params, tokens, latency, TTFT |
 
-### Zeitstempel
+### Timestamps
 
-Alle Zeitstempel timezone-aware: `YYYY-MM-DD HH:MM:SS+HH:MM` (lokale Zeit mit UTC-Offset). Sortierbar, direkt lesbar in DB-Viewern.
+All timestamps are timezone-aware: `YYYY-MM-DD HH:MM:SS+HH:MM` (local time with UTC offset). Sortable, directly readable in DB viewers.
 
 ### Views
 
-- `v_serve_telemetry` – Request-Timings mit Runtime-Kontext
-- `v_serve_model_instances` – geladene Modellinstanzen mit effektiven Args
-- `v_router_performance` – Lifecycle-Events aggregiert
-- `v_bench_results` / `v_eval_results` – Mess-Ergebnisse
+- `v_serve_telemetry` – Request timings with runtime context
+- `v_serve_model_instances` – Loaded model instances with effective args
+- `v_router_performance` – Aggregated lifecycle events
+- `v_bench_results` / `v_eval_results` – Measurement results
 
 ---
 
-## 13. CLI-Referenz
+## 13. CLI Reference
 
-### Aufruf-Syntax
+### Usage Syntax
 
 ```bash
-uv run src/dispatcher.py <modus> [optionen] [llama.cpp-overrides...]
+uv run src/dispatcher.py <mode> [options] [llama.cpp-overrides...]
 ```
 
-### Modi (Pflichtargument)
+### Modes (Required argument)
 
-| Modus | Beschreibung |
+| Mode | Description |
 |---|---|
-| `serve` | Startet llama.cpp + Dispatcher-Proxy. Benötigt `--ensemble` **oder** `--profile` |
-| `bench` | Benchmark (pp/tg-Geschwindigkeit). Benötigt `--profile` |
-| `eval` | Perplexity-Messung. Benötigt `--profile` und `--dataset` |
+| `serve` | Starts llama.cpp + Dispatcher-Proxy. Requires `--ensemble` **or** `--profile` |
+| `bench` | Benchmark (pp/tg speed). Requires `--profile` |
+| `eval` | Perplexity measurement. Requires `--profile` and `--dataset` |
 
-### Optionen
+### Options
 
-| Option | Default | Beschreibung |
+| Option | Default | Description |
 |---|---|---|
-| `--ensemble NAME` | – | Name des Ensemble-YAMLs (ohne `.yaml`). Für `serve` im Router-Modus mit Proxy |
-| `--profile NAME` | – | Name des Profil-YAMLs (ohne `.yaml`). Für `serve` Einzelmodell, `bench`, `eval` |
-| `--instance NAME` | – | Instanzname (Ordner unter `instances/`). **Ohne diesen Parameter läuft der Dispatcher im Legacy-Modus** und sucht Profile/Ensembles im Projektroot. Kein Prompt. |
-| `--api-port PORT` | aus Ensemble oder `8001` | Port des Dispatcher-Proxys. Überschreibt `dispatcher.port` im Ensemble-YAML |
-| `--dataset PFAD` | `data/wikitext-2-raw.txt` | Textdatei für `eval` (Perplexity) |
-| `--compile-only` | – | Kompiliert INI und zeigt den llama.cpp-Startbefehl, startet aber nichts |
+| `--ensemble NAME` | – | Name of the ensemble YAML (without `.yaml`). For `serve` in router mode with proxy |
+| `--profile NAME` | – | Name of the profile YAML (without `.yaml`). For `serve` single model, `bench`, `eval` |
+| `--instance NAME` | – | Instance name (folder under `instances/`). **Without this parameter, the Dispatcher runs in Legacy Mode** and searches for profiles/ensembles in the project root. No prompt. |
+| `--api-port PORT` | from Ensemble or `8001` | Port of the Dispatcher-Proxy. Overrides `dispatcher.port` in the ensemble YAML |
+| `--dataset PATH` | `data/wikitext-2-raw.txt` | Text file for `eval` (Perplexity) |
+| `--compile-only` | – | Compiles INI and shows the llama.cpp start command, but starts nothing |
 
-### Ad-hoc llama.cpp-Overrides
+### Ad-hoc llama.cpp Overrides
 
-**Alle** llama.cpp-Parameter können direkt an der CLI übergeben werden – sie überschreiben
-das Profil/Ensemble mit der höchsten Priorität. Der Dispatcher erkennt und kanonisiert
-sämtliche Schreibweisen automatisch (kurz, lang, Binde- oder Unterstrich):
+**All** llama.cpp parameters can be passed directly via the CLI – they overwrite the profile/ensemble with the highest priority. The Dispatcher automatically recognizes and canonizes all spellings (short, long, dash or underscore):
 
 ```bash
-# Kontext auf 8192 begrenzen (für schnelle Tests)
+# Limit context to 8192 (for quick tests)
 uv run src/dispatcher.py serve --ensemble thinkpad --instance Laptop --ctx-size 8192
 
-# Parallelität und Threads überschreiben
+# Overwrite parallelism and threads
 uv run src/dispatcher.py bench --profile Thinkpad_vulkan_gemma_26B_A4B --instance Laptop \
     --parallel 2 --threads 8
 
-# Sampling für diesen Start überschreiben
+# Overwrite sampling for this start
 uv run src/dispatcher.py serve --ensemble thinkpad --instance Laptop \
     --temperature 0.5 --top-k 40
 ```
 
-Boolean-Flags werden als `true`/`false` oder als nacktes Flag akzeptiert:
+Boolean flags are accepted as `true`/`false` or as a bare flag:
 ```bash
---flash-attn true   # explizit
---flash-attn        # äquivalent (Flag ohne Wert = true)
---no-kv-offload     # negierendes Präfix für Schalter
+--flash-attn true   # explicit
+--flash-attn        # equivalent (flag without value = true)
+--no-kv-offload     # negating prefix for switches
 ```
 
 ---
 
-## 14. Parameternamen-System
+## 14. Parameter Naming System
 
-### Das Problem
+### The Problem
 
-YAML verbietet Unterstriche in Schlüsseln nicht, aber llama.cpp verwendet Bindestriche
-(`--ctx-size`, `--cache-type-k`). Obendrauf gibt es Kurz- und Langformen (`-c` vs. `--ctx-size`).
-Das Ensemble/Profil kann aus drei Quellen stammen (Defaults, Engine, Profil), die jeweils
-unterschiedliche Konventionen verwenden könnten. Ohne klare Regel sind Tippfehler
-still und wirkungslos.
+YAML does not forbid underscores in keys, but llama.cpp uses dashes (`--ctx-size`, `--cache-type-k`). On top of that, there are short and long forms (`-c` vs. `--ctx-size`). The ensemble/profile can come from three sources (Defaults, Engine, Profile), each of which might use different conventions. Without clear rules, typos are silent and ineffective.
 
-### Die Lösung: Kanonisierung
+### The Solution: Canonicalization
 
-Der Dispatcher normalisiert **jeden** Schlüssel beim Einlesen auf die **kanonische Form**:
-→ Bindestriche, Langform, ohne führende Dashes.
+The Dispatcher normalizes **every** key upon reading to its **canonical form**:
+→ Dashes, long form, without leading dashes.
 
-Kanonisierungsschritte (in Reihenfolge):
-1. Führende `-` oder `--` entfernen
-2. Alle `_` durch `-` ersetzen
-3. Kurzform in Langform übersetzen (via `PARAM_MAPPING`)
+Canonicalization steps (in order):
+1. Remove leading `-` or `--`
+2. Replace all `_` with `-`
+3. Translate short form to long form (via `PARAM_MAPPING`)
 
-**Resultat:** `top_k`, `top-k`, `-tk` (falls definiert) – alles wird zu `top-k`.
+**Result:** `top_k`, `top-k`, `-tk` (if defined) – all become `top-k`.
 
-### Empfehlung für YAMLs
+### Recommendation for YAMLs
 
-**Bindestriche verwenden.** Der Dispatcher akzeptiert beides, aber Bindestriche entsprechen
-dem llama.cpp-Standard und sind in `debug/config` und der Datenbank so zu sehen.
+**Use dashes.** The Dispatcher accepts both, but dashes correspond to the llama.cpp standard and are what you see in `debug/config` and the database.
 
 ```yaml
-# ✅ Bevorzugt
+# ✅ Preferred
 cache-type-k: "q8_0"
 flash-attn: true
 
-# ✅ Funktioniert auch (wird zu oben kanonisiert)
+# ✅ Works (will be canonized to the above)
 cache_type_k: "q8_0"
 flash_attn: true
 
-# ✅ Kurzform in common:/serve: funktioniert
+# ✅ Shorthand in common:/serve: works
 ngl: 99    # → n-gpu-layers
 c: 65536   # → ctx-size
 ```
 
-### Gruppen-Schlüssel (nur YAML, nicht an llama.cpp)
+### Group Keys (YAML only, not to llama.cpp)
 
-Diese Schlüssel existieren **nicht** in llama.cpp – sie sind YAML-Komfort-Wrapper.
-Ihr Inhalt wird vor der Kanonisierung flach ausgepackt:
+These keys do not exist in llama.cpp – they are YAML comfort wrappers. Their content is flattened before canonicalization:
 
 ```yaml
-sampling:         # → Inhalt wird direkt in die Parameter-Liste gepackt
+# The content is packed directly into the parameter list
+sampling:
   temperature: 1.0
   top-k: 64
   top-p: 0.95
 
-# Äquivalent zu:
+# Equivalent to:
 temperature: 1.0
 top-k: 64
 top-p: 0.95
 ```
 
-Gültige Gruppen-Schlüssel: `sampling`, `sampler`, `generation`, `defaults`
+Valid group keys: `sampling`, `sampler`, `generation`, `defaults`
 
-### Vollständige Kurzform-Tabelle (PARAM_MAPPING)
+### Full Shorthand Table (PARAM_MAPPING)
 
-| Kurzform / Alias | Kanonische Langform |
+| Shorthand / Alias | Canonical Long Form |
 |---|---|
 | `c`, `ctx`, `context` | `ctx-size` |
 | `b` | `batch-size` |
@@ -637,54 +630,53 @@ Gültige Gruppen-Schlüssel: `sampling`, `sampler`, `generation`, `defaults`
 | `load_on_startup` | `load-on-startup` |
 | `api_key` | `api-key` |
 
-> Alle anderen Schlüssel: `_` → `-` reicht. `cache_type_k` → `cache-type-k` automatisch.
+> All other keys: `_` → `-` is sufficient. `cache_type_k` → `cache-type-k` automatically.
 
-### Was mit eingehenden Request-Parametern passiert (Proxy)
+### What happens to incoming request parameters (Proxy)
 
-Wenn ein Client `temperature: 0.9` sendet und das Ensemble `temperature: 0.3` konfiguriert hat,
-**überschreibt der Proxy den Client-Wert immer**. Das ist so gewollt.
+If a client sends `temperature: 0.9` and the ensemble has `temperature: 0.3` configured,
+**the Proxy always overwrites the client value**. This is intended.
 
-Die Sampling-Parameter, die der Proxy verwaltet (und ggf. überschreibt), sind:
+The sampling parameters managed (and potentially overwritten) by the Proxy are:
 
 `temperature`, `top-p`, `top-k`, `min-p`, `repeat-penalty`, `presence-penalty`,
 `frequency-penalty`, `typical-p`, `dynatemp-range`, `dynatemp-exp`, `mirostat-lr`,
 `mirostat-ent`, `dry-multiplier`, `dry-base`, `dry-allowed-length`, `dry-penalty-last-n`,
 `sampler-seq`, `repeat-last-n`
 
-**In der Datenbank** werden sie in der kanonischen Form (Bindestriche) gespeichert.
-**Im JSON-Body** an llama.cpp werden sie mit Unterstrichen geschrieben (`top_k`, `temperature`)
-– das erwartet die OpenAI-kompatible llama.cpp-API.
+**In the database**, they are stored in canonical form (dashes).
+**In the JSON body** sent to llama.cpp, they are written with underscores (`top_k`, `temperature`) – this is what the OpenAI-compatible llama.cpp API expects.
 
-`chat_template_kwargs` ist ein Sonderfall: er wird als Proxy-Parameter injiziert,
-erscheint aber nicht in der llama.cpp-INI.
+`chat_template_kwargs` is a special case: it is injected as a Proxy parameter,
+but does not appear in the llama.cpp-INI.
 
 ---
 
-## 15. Starten – Schnellreferenz
+## 15. Starting – Quick Reference
 
 ```bash
-# Ensemble starten (Proxy + llama.cpp)
+# Start Ensemble (Proxy + llama.cpp)
 uv run src/dispatcher.py serve --ensemble thinkpad --instance Laptop
 uv run src/dispatcher.py serve --ensemble 3090    --instance Speedy
 
-# Nur kompilieren, nicht starten
+# Compile only, do not start
 uv run src/dispatcher.py serve --ensemble thinkpad --instance Laptop --compile-only
 
-# Proxy-Konfiguration prüfen (während Betrieb)
+# Check proxy configuration (during operation)
 curl http://localhost:8001/debug/config
 
-# Request-Transformation simulieren (während Betrieb)
+# Simulate request transformation (during operation)
 curl http://localhost:8001/debug/preview \
   -H "Content-Type: application/json" \
-  -d '{"model":"agent","messages":[{"role":"user","content":"test"}]}'
+  -d '{"model":"agent","messages":[{"role":"user","content":"test"}], "temperature":0.9}'
 
-# Modelle sehen (wie Open WebUI)
+# See models (like Open WebUI)
 curl http://localhost:8001/v1/models
 
-# Instanz sichern (Laptop)
+# Backup instance (Laptop)
 cd instances/Laptop && git add . && git commit -m "Update" && git push
 
-# Fresh Install auf neuem Rechner (alle 3 Repos in einem Rutsch)
+# Fresh Install on a new machine (all 3 repos in one go)
 git clone https://github.com/SomeSunlight/Llama_Dispatcher.git
 cd Llama_Dispatcher
 git clone https://github.com/SomeSunlight/Llama_Dispatcher_Laptop.git instances/Laptop

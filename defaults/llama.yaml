@@ -1,8 +1,8 @@
 # defaults/models/llama.yaml
-# Meta Llama – empfohlene Sampling-Parameter (hardware-agnostisch)
-# Quelle: https://llama.meta.com/
+# Meta Llama – recommended sampling parameters (hardware-agnostic)
+# Source: https://llama.meta.com/
 #
-# Wird in Profilen referenziert via:
+# Referenced in profiles via:
 #   defaults:
 #     model: "llama"
 

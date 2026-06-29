@@ -1,34 +1,33 @@
-# Engine-Templates für den Llama Dispatcher
+# Engine Templates for the Llama Dispatcher
 #
-# Was ist das hier?
+# What is this?
 # ────────────────
-# Dieses Verzeichnis enthält Vorlagen für Engine-Konfigurationen.
-# Eine "Engine" = eine konkrete llama.cpp-Implementierung (CUDA, Vulkan, SYCL, …)
-# mit ihrem spezifischen Binärverzeichnis (bin_dir).
+# This directory contains templates for engine configurations.
+# An "Engine" = a specific llama.cpp implementation (CUDA, Vulkan, SYCL, ...)
+# with its specific binary directory (bin_dir).
 #
-# Diese Templates werden NICHT direkt vom Dispatcher geladen.
-# Sie dienen als Vorlage zum Kopieren in deine Instanz.
+# These templates are NOT loaded directly by the Dispatcher.
+# They serve as templates for copying into your instance.
 #
-# So verwendest du sie:
+# How to use them:
 # ─────────────────────
-# 1. Kopiere die passende Template-Datei in dein Instanz-Verzeichnis:
+# 1. Copy the appropriate template file to your instance directory:
 #       cp defaults/engine-templates/vulkan.yaml instances/Laptop/engines/vulkan.yaml
 #
-# 2. Passe den bin_dir-Pfad in der kopierten Datei an.
+# 2. Adjust the bin_dir path in the copied file.
 #
-# 3. Referenziere die Engine in deinen Profilen:
+# 3. Reference the engine in your profiles:
 #       defaults:
 #         model:  "gemma"
 #         engine: "vulkan"
 #
-# Der Dispatcher sucht Engine-Konfigurationen in dieser Reihenfolge:
-#   1. instances/<name>/engines/<engine>.yaml   ← deine maschinenspezifischen Werte
-#   2. defaults/engine-templates/<engine>.yaml  ← Fallback (dieser Ordner)
+# The Dispatcher searches for engine configurations in this order:
+#   1. instances/<name>/engines/<engine>.yaml   ← your machine-specific values
+#   2. defaults/engine-templates/<engine>.yaml  ← Fallback (this directory)
 #
-# Warum ist das getrennt von den Modell-Defaults?
+# Why is this separate from model defaults?
 # ────────────────────────────────────────────────
-# - defaults/models/  → sampling-Parameter, hardware-agnostisch, öffentlich versioniert
-# - instances/<name>/engines/ → bin_dir und Backend-Flags, maschinenspezifisch, privat
+# - defaults/models/  → sampling parameters, hardware-agnostic, publicly versioned
+# - instances/<name>/engines/ → bin_dir and backend flags, machine-specific, private
 #
-# Jede neue llama.cpp-Version, jeder neue Treiber → nur eine Datei ändern.
-
+# Every new llama.cpp version, every new driver → change only one file.

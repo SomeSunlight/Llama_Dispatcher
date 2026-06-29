@@ -1,13 +1,13 @@
 # defaults/models/gemma.yaml
-# Google Gemma – empfohlene Sampling-Parameter (hardware-agnostisch)
-# Quelle: https://ai.google.dev/gemma/docs/
+# Google Gemma – recommended sampling parameters (hardware-agnostic)
+# Source: https://ai.google.dev/gemma/docs/
 #
-# Wird in Profilen referenziert via:
+# Referenced in profiles via:
 #   defaults:
 #     model: "gemma"
 #
-# Abweichende Profil-Werte überschreiben diese Defaults (deep merge).
-# Abweichungen sollten im Profil mit # ! kommentiert sein.
+# Overriding profile values will overwrite these defaults (deep merge).
+# Deviations should be commented with # ! in the profile.
 
 serve:
   sampling:

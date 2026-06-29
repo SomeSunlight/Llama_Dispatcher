@@ -1,8 +1,8 @@
 # defaults/models/qwen.yaml
-# Alibaba Qwen – empfohlene Sampling-Parameter (hardware-agnostisch)
-# Quelle: https://qwen.readthedocs.io/
+# Alibaba Qwen – recommended sampling parameters (hardware-agnostic)
+# Source: https://qwen.readthedocs.io/
 #
-# Wird in Profilen referenziert via:
+# Referenced in profiles via:
 #   defaults:
 #     model: "qwen"
 
