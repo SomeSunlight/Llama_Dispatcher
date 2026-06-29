@@ -1,0 +1,8 @@
+[submodule "instances/Laptop"]
+	path = instances/Laptop
+	url = https://github.com/SomeSunlight/Llama_Dispatcher_Laptop.git
+
+[submodule "instances/Speedy"]
+	path = instances/Speedy
+	url = https://github.com/SomeSunlight/Llama_Dispatcher_Speedy.git
+
