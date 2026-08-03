@@ -308,47 +308,160 @@ models:
 
 ---
 
-## 8. The Proxy – Model Aliases and Parameter Injection
+## 8. The Proxy – Model Aliases, Parameter Resolution, and Logging
 
-The Dispatcher is a **full OpenAI-compatible Proxy**. Clients point to `http://<host>:8001/v1/` instead of directly to llama.cpp.
+The Dispatcher is a **full OpenAI-compatible Proxy**. Clients point to
+`http://<host>:8001/v1/` instead of directly to llama.cpp. The central design
+rule is intentional: **Dispatcher policy values overwrite client values.**
+Clients may send arbitrary OpenAI-compatible parameters, but every parameter
+configured for the selected alias is centrally enforced before forwarding.
+Parameters not managed by the selected alias pass through unchanged.
 
-### What the Proxy does
+### The three request states
+
+Every proxied request has three distinct identities that must not be confused:
+
+| State | Example | Meaning |
+|---|---|---|
+| Client model | `agent` | Public alias sent by Open WebUI, Goose, curl, etc. |
+| Resolved profile | `3090_gemma_fast...` | Dispatcher profile backing that public alias |
+| Target model | `Sparringpartner` | Effective llama.cpp alias after optional `target:` remapping |
+
+The same distinction applies to parameters:
+
+- **Client parameters** are the untouched control parameters received by the Dispatcher.
+- **Dispatcher policy parameters** are compiled for the selected public alias from model defaults, engine defaults, the profile, and the ensemble entry.
+- **Effective parameters** are the final values sent to llama.cpp after policy enforcement and alias remapping.
+
+The current runtime keeps the compiled alias policy, not a complete provenance tree for
+every individual value. Logging can therefore state reliably that a value came from
+`dispatcher_policy` and identify the public alias and resolved profile. It does not
+claim whether that value originally came from model defaults, the profile, or an
+ensemble override when that distinction is no longer available at request time.
+
+### Configuration and request flow
+
+```text
+                         CONFIGURATION SOURCES
+
+  defaults/<model>.yaml     instance engine      profile YAML      ensemble entry
+  (model defaults)          (engine defaults)    (model/mode)      (alias overrides)
+          \                      |                    |                  /
+           \_____________________|____________________|_________________/
+                                  |
+                                  v
+                    Dispatcher compiles alias policy
+                    - public alias -> resolved profile
+                    - public alias -> sampling policy
+                    - optional public alias -> target alias
+                                  |
+                                  |
+CLIENTS                           |                         llama.cpp
+Open WebUI / Goose / curl         |                         internal server
+                                  |
+POST /v1/chat/completions         |
+{                                 |
+  "model": "agent",             |
+  "temperature": 0.9,            |
+  "max_tokens": 4096             |
+} ------------------------------> Dispatcher
+                                  | 1. preserve client snapshot
+                                  | 2. resolve profile for "agent"
+                                  | 3. overwrite configured values
+                                  |    temperature: 0.9 -> 0.3
+                                  | 4. pass through unmanaged values
+                                  |    max_tokens: 4096
+                                  | 5. remap model when target is set
+                                  |    agent -> Sparringpartner
+                                  | 6. preserve effective snapshot + diff
+                                  v
+                         POST /v1/chat/completions
+                         {
+                           "model": "Sparringpartner",
+                           "temperature": 0.3,
+                           "max_tokens": 4096
+                         } ---------------------------> llama.cpp
+```
+
+### Resolution rules
 
 For every incoming request:
 
-1. **Alias Lookup**: Finds the configured parameters for the requested model (`model: "agent"`)
-2. **Sampling Injection**: Injects `temperature`, `top_p`, `top_k`, `min_p`, `repeat_penalty`, `chat_template_kwargs` – **Proxy values always overwrite client values**
-3. **Alias Remapping** (with `target:`): Rewrites `model: "agent"` → `model: "Sparringpartner"`
-4. **Forwarding** to llama.cpp (Port 8081)
-5. **Logging**: Endpoint, model, tokens, latency, TTFT in SQLite
+1. **Preserve client intent** before changing the request.
+2. **Resolve the public alias** and its backing profile.
+3. **Apply Dispatcher policy**. Configured values always overwrite client values.
+4. **Pass through unmanaged parameters** unchanged, including future OpenAI-compatible or llama.cpp request fields.
+5. **Apply `target:` remapping** for proxy-only aliases.
+6. **Forward the effective request** to llama.cpp.
+7. **Log client intent, resolution, effective values, transformation details, and response metrics.**
 
-### What Clients See
+`chat_template_kwargs` is treated as one policy value. If configured for an alias,
+the configured object replaces the client object; it is not recursively merged.
 
-```
+### What clients see
+
+```text
 GET http://localhost:8001/v1/models
-→ ["Sparringpartner", "agent"]   ← both visible, one model in VRAM
+-> ["Sparringpartner", "agent"]   # both visible, one model in VRAM
 ```
 
-### Data Flow
+### Proxy request logging
 
+`metrics_proxy_requests` keeps compatibility with the older schema while adding an
+explicit v7 model. Historical `req_*` fields were already populated **after**
+Dispatcher transformation; despite their names, they contain effective values. They
+remain available for existing queries. New code also writes clearly named fields:
+
+| Field group | Purpose |
+|---|---|
+| `client_model`, `resolved_profile`, `target_model`, `alias_remapped` | Request routing at a glance |
+| `effective_*` | Frequently queried values that actually reached llama.cpp |
+| `client_params_json` | Complete client control parameters before transformation |
+| `effective_params_json` | Complete control parameters forwarded to llama.cpp |
+| `parameter_changes_json` | Changed values with `client`, `effective`, and `source` |
+
+The JSON snapshots exclude `messages`, `prompt`, and `input`. They record request
+control parameters without duplicating conversation or prompt content in telemetry.
+Unknown or future parameters remain visible in JSON without requiring a schema change.
+
+Example transformation record:
+
+```json
+{
+  "model": {
+    "client": "agent",
+    "effective": "Sparringpartner",
+    "source": "alias_target"
+  },
+  "temperature": {
+    "client": 0.9,
+    "effective": 0.3,
+    "source": "dispatcher_policy",
+    "configured_for": "agent",
+    "resolved_profile": "3090_gemma_fast_top_quality_workhorse_2x131k_q8"
+  }
+}
 ```
-Open WebUI / Goose / curl
-  POST /v1/chat/completions  { "model": "agent", "temperature": 0.9, ... }
-        ↓
-Dispatcher (Port 8001):
-  → Load sampling for "agent": temp=0.3, top_k=20, enable_thinking=false
-  → temperature: 0.9 → 0.3  (Proxy overwrites)
-  → model: "agent" → "Sparringpartner"  (Remapping)
-  → Forwarding: { "model": "Sparringpartner", "temperature": 0.3, ... }
-        ↓
-llama.cpp (Port 8081): knows only [Sparringpartner] – one model, no swaps
+
+For the normal operational overview:
+
+```sql
+SELECT *
+FROM v_proxy_request_summary
+ORDER BY timestamp DESC;
 ```
 
-### Why this makes sense
+Existing databases are upgraded additively. Historical effective values are copied
+from the legacy fields where their meaning is certain. Historical client aliases,
+client snapshots, and exact parameter provenance remain `NULL` because they were not
+recorded and must not be invented.
 
-- **Consistency**: All clients receive the same parameters, regardless of what they send
-- **VRAM Efficiency**: Multiple aliases, one model – no constant loading/unloading
-- **Centralized Configuration**: Thinking on/off, sampling mode – all in the ensemble file, not in the client
+### Why this design makes sense
+
+- **Consistency**: all clients use the same centrally managed policy.
+- **VRAM efficiency**: multiple public aliases can share one loaded target model.
+- **Transparent telemetry**: SQL shows what the client selected and what actually ran.
+- **Forward compatibility**: arbitrary parameters remain available in JSON snapshots.
 
 ---
 

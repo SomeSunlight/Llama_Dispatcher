@@ -47,24 +47,87 @@ class MetricsDatabase:
                 conn.executescript(f.read())
 
     def _upgrade_schema(self):
-        """Fügt fehlende Spalten zu bestehenden Datenbanken hinzu (automatische Schema-Migration)."""
+        """Apply additive, idempotent schema migrations while preserving measurements."""
         with sqlite3.connect(self.db_path) as conn:
+            conn.execute("PRAGMA foreign_keys = ON")
+
             # v4 → v5: machine_id in execution_runs
             cols = [row[1] for row in conn.execute("PRAGMA table_info(execution_runs)")]
             if "machine_id" not in cols:
                 conn.execute(
                     "ALTER TABLE execution_runs ADD COLUMN machine_id TEXT NOT NULL DEFAULT 'unknown'"
                 )
-                print("[DB] Schema-Upgrade v4→v5: machine_id-Spalte hinzugefügt.")
-            # v5 → v6: injected_params in metrics_proxy_requests (falls Tabelle existiert)
+                print("[DB] Schema upgrade v4→v5: added execution_runs.machine_id.")
+
             tables = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
-            if "metrics_proxy_requests" in tables:
-                pcols = [row[1] for row in conn.execute("PRAGMA table_info(metrics_proxy_requests)")]
-                if "injected_params" not in pcols:
-                    conn.execute(
-                        "ALTER TABLE metrics_proxy_requests ADD COLUMN injected_params TEXT"
-                    )
-                    print("[DB] Schema-Upgrade: injected_params-Spalte zu metrics_proxy_requests hinzugefügt.")
+            if "metrics_proxy_requests" not in tables:
+                return
+
+            pcols = {row[1] for row in conn.execute("PRAGMA table_info(metrics_proxy_requests)")}
+            additions = {
+                "injected_params": "TEXT",
+                "client_model": "TEXT",
+                "resolved_profile": "TEXT",
+                "target_model": "TEXT",
+                "alias_remapped": "INTEGER",
+                "effective_temperature": "REAL",
+                "effective_top_p": "REAL",
+                "effective_top_k": "INTEGER",
+                "effective_min_p": "REAL",
+                "effective_repeat_penalty": "REAL",
+                "effective_max_tokens": "INTEGER",
+                "effective_enable_thinking": "INTEGER",
+                "client_params_json": "TEXT",
+                "effective_params_json": "TEXT",
+                "parameter_changes_json": "TEXT",
+            }
+            added = []
+            for column, sql_type in additions.items():
+                if column not in pcols:
+                    conn.execute(f"ALTER TABLE metrics_proxy_requests ADD COLUMN {column} {sql_type}")
+                    added.append(column)
+
+            # Historical req_* values were logged after Dispatcher transformation. They can
+            # therefore be copied safely to effective_* fields. The original client alias and
+            # client parameters were never stored and deliberately remain NULL.
+            conn.execute(
+                """
+                UPDATE metrics_proxy_requests
+                SET target_model = COALESCE(target_model, model_requested),
+                    effective_temperature = COALESCE(effective_temperature, req_temperature),
+                    effective_top_p = COALESCE(effective_top_p, req_top_p),
+                    effective_top_k = COALESCE(effective_top_k, req_top_k),
+                    effective_min_p = COALESCE(effective_min_p, req_min_p),
+                    effective_max_tokens = COALESCE(effective_max_tokens, req_max_tokens),
+                    effective_enable_thinking = COALESCE(effective_enable_thinking, req_enable_thinking)
+                WHERE target_model IS NULL
+                   OR effective_temperature IS NULL
+                   OR effective_top_p IS NULL
+                   OR effective_top_k IS NULL
+                   OR effective_min_p IS NULL
+                   OR effective_max_tokens IS NULL
+                   OR effective_enable_thinking IS NULL
+                """
+            )
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_proxy_requests_timestamp "
+                "ON metrics_proxy_requests(timestamp)"
+            )
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_proxy_requests_client_model "
+                "ON metrics_proxy_requests(client_model)"
+            )
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_proxy_requests_target_model "
+                "ON metrics_proxy_requests(target_model)"
+            )
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_proxy_requests_run "
+                "ON metrics_proxy_requests(run_id)"
+            )
+            conn.execute("PRAGMA user_version = 7")
+            if added:
+                print("[DB] Schema upgrade to v7: added proxy request logging columns: " + ", ".join(added))
 
     @staticmethod
     def _json(data: Any) -> str:
@@ -247,6 +310,10 @@ class MetricsDatabase:
         run_id: str | None,
         endpoint: str,
         model_requested: str | None,
+        client_model: str | None,
+        resolved_profile: str | None,
+        target_model: str | None,
+        alias_remapped: int,
         stream: int,
         req_temperature: float | None,
         req_top_p: float | None,
@@ -254,6 +321,10 @@ class MetricsDatabase:
         req_min_p: float | None,
         req_max_tokens: int | None,
         req_enable_thinking: int | None,
+        effective_repeat_penalty: float | None,
+        client_params: dict | None,
+        effective_params: dict | None,
+        parameter_changes: dict | None,
         prompt_tokens: int | None,
         completion_tokens: int | None,
         finish_reason: str | None,
@@ -262,24 +333,35 @@ class MetricsDatabase:
         status_code: int,
         injected_params: str | None = None,
     ):
-        """Loggt einen proxied Client-Request mit Sampling-Parametern und Response-Stats."""
+        """Log client intent, Dispatcher resolution, effective request, and response metrics."""
         with sqlite3.connect(self.db_path) as conn:
             conn.execute("PRAGMA foreign_keys = ON")
             conn.execute(
                 """
                 INSERT INTO metrics_proxy_requests (
-                    machine_id, run_id, timestamp, endpoint, model_requested, stream,
+                    machine_id, run_id, timestamp, endpoint, model_requested,
+                    client_model, resolved_profile, target_model, alias_remapped, stream,
                     req_temperature, req_top_p, req_top_k, req_min_p, req_max_tokens,
-                    req_enable_thinking, prompt_tokens, completion_tokens, finish_reason,
-                    duration, ttft, status_code, injected_params
+                    req_enable_thinking,
+                    effective_temperature, effective_top_p, effective_top_k, effective_min_p,
+                    effective_repeat_penalty, effective_max_tokens, effective_enable_thinking,
+                    client_params_json, effective_params_json, parameter_changes_json,
+                    prompt_tokens, completion_tokens, finish_reason, duration, ttft,
+                    status_code, injected_params
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
-                    self.machine_id, run_id, _now_local(), endpoint, model_requested, stream,
+                    self.machine_id, run_id, _now_local(), endpoint, model_requested,
+                    client_model, resolved_profile, target_model, alias_remapped, stream,
                     req_temperature, req_top_p, req_top_k, req_min_p, req_max_tokens,
-                    req_enable_thinking, prompt_tokens, completion_tokens, finish_reason,
-                    duration, ttft, status_code, injected_params,
+                    req_enable_thinking,
+                    req_temperature, req_top_p, req_top_k, req_min_p,
+                    effective_repeat_penalty, req_max_tokens, req_enable_thinking,
+                    self._json(client_params), self._json(effective_params),
+                    self._json(parameter_changes),
+                    prompt_tokens, completion_tokens, finish_reason, duration, ttft,
+                    status_code, injected_params,
                 ),
             )
 

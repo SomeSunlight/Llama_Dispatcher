@@ -2,7 +2,7 @@
 -- Neue Spalte machine_id in execution_runs für multi-Instanz-Unterstützung.
 -- Bestehende v4-Datenbanken werden via _upgrade_schema() in database_manager.py migriert.
 PRAGMA foreign_keys = ON;
-PRAGMA user_version = 5;
+PRAGMA user_version = 7;
 
 CREATE TABLE IF NOT EXISTS execution_runs (
     run_id TEXT PRIMARY KEY,
@@ -96,28 +96,83 @@ CREATE TABLE IF NOT EXISTS metrics_lifecycle (
 CREATE TABLE IF NOT EXISTS metrics_proxy_requests (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     machine_id TEXT NOT NULL DEFAULT 'unknown',
-    run_id TEXT,                          -- aktiver execution_runs.run_id, nullable
+    run_id TEXT,                          -- active execution_runs.run_id, nullable
     timestamp DATETIME,
-    endpoint TEXT NOT NULL,               -- z.B. 'chat/completions', 'completions'
-    model_requested TEXT,                 -- was der Client im Feld 'model' schickte
+    endpoint TEXT NOT NULL,               -- e.g. 'chat/completions', 'completions'
+
+    -- Compatibility fields from schema v6. They contain effective values, despite req_* names.
+    model_requested TEXT,                 -- effective model sent to llama.cpp (legacy name)
     stream INTEGER NOT NULL DEFAULT 0,    -- 0/1
-    -- Vom Client explizit gesendete Sampling-Parameter (NULL = Client hat es nicht gesetzt)
     req_temperature REAL,
     req_top_p REAL,
     req_top_k INTEGER,
     req_min_p REAL,
     req_max_tokens INTEGER,
-    req_enable_thinking INTEGER,          -- aus chat_template_kwargs.enable_thinking (0/1)
-    -- Antwort-Statistiken (aus Response-Body extrahiert)
+    req_enable_thinking INTEGER,
+
+    -- Explicit request-resolution model (schema v7).
+    client_model TEXT,                    -- exact public alias sent by the client
+    resolved_profile TEXT,                -- Dispatcher profile backing client_model
+    target_model TEXT,                    -- effective model alias sent to llama.cpp
+    alias_remapped INTEGER,               -- 1 when client_model != target_model
+
+    -- Frequently queried effective values sent to llama.cpp.
+    effective_temperature REAL,
+    effective_top_p REAL,
+    effective_top_k INTEGER,
+    effective_min_p REAL,
+    effective_repeat_penalty REAL,
+    effective_max_tokens INTEGER,
+    effective_enable_thinking INTEGER,
+
+    -- Complete prompt-free control-parameter snapshots and transformation details.
+    client_params_json TEXT,              -- JSON before Dispatcher transformation
+    effective_params_json TEXT,           -- JSON forwarded to llama.cpp
+    parameter_changes_json TEXT,          -- JSON diff with source classification
+
+    -- Response statistics extracted from llama.cpp responses.
     prompt_tokens INTEGER,
     completion_tokens INTEGER,
-    finish_reason TEXT,                   -- stop, length, tool_calls, …
-    duration REAL,                        -- Gesamtdauer Request→letzter Chunk (Sekunden)
-    ttft REAL,                            -- Time-to-first-token (Sekunden)
+    finish_reason TEXT,                   -- stop, length, tool_calls, ...
+    duration REAL,                        -- request to last chunk, seconds
+    ttft REAL,                            -- time to first token, seconds
     status_code INTEGER,
-    injected_params TEXT,                 -- JSON: Parameter die vom Profil überschrieben wurden
+    injected_params TEXT,                 -- legacy compact JSON of changed policy values
     FOREIGN KEY(run_id) REFERENCES execution_runs(run_id) ON DELETE SET NULL
 );
+
+
+DROP VIEW IF EXISTS v_proxy_request_summary;
+CREATE VIEW v_proxy_request_summary AS
+SELECT
+    id,
+    machine_id,
+    run_id,
+    timestamp,
+    endpoint,
+    client_model,
+    resolved_profile,
+    target_model,
+    alias_remapped,
+    stream,
+    effective_enable_thinking AS thinking,
+    effective_temperature AS temperature,
+    effective_top_p AS top_p,
+    effective_top_k AS top_k,
+    effective_min_p AS min_p,
+    effective_repeat_penalty AS repeat_penalty,
+    effective_max_tokens AS max_tokens,
+    prompt_tokens,
+    completion_tokens,
+    finish_reason,
+    ttft,
+    duration,
+    status_code,
+    CASE
+        WHEN parameter_changes_json IS NULL OR parameter_changes_json = '' THEN 0
+        ELSE (SELECT COUNT(*) FROM json_each(parameter_changes_json))
+    END AS changed_parameter_count
+FROM metrics_proxy_requests;
 
 DROP VIEW IF EXISTS v_serve_telemetry;
 CREATE VIEW v_serve_telemetry AS
