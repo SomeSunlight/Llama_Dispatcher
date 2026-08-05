@@ -1,21 +1,21 @@
 -- Llama Dispatcher metrics schema v5
--- Neue Spalte machine_id in execution_runs für multi-Instanz-Unterstützung.
--- Bestehende v4-Datenbanken werden via _upgrade_schema() in database_manager.py migriert.
+-- New machine_id column in execution_runs for multi-instance support.
+-- Existing v4 databases are migrated via _upgrade_schema() in database_manager.py.
 PRAGMA foreign_keys = ON;
 PRAGMA user_version = 5;
 
 CREATE TABLE IF NOT EXISTS execution_runs (
     run_id TEXT PRIMARY KEY,
-    machine_id TEXT NOT NULL DEFAULT 'unknown',  -- UUID der Dispatcher-Instanz (aus instance.yaml)
+    machine_id TEXT NOT NULL DEFAULT 'unknown',  -- Dispatcher instance UUID (from instance.yaml)
     timestamp DATETIME,
     tool_mode TEXT NOT NULL,             -- 'serve', 'bench', 'eval'
-    ensemble_name TEXT NOT NULL,         -- Ensemble (serve) oder Profil-Name (bench/eval)
+    ensemble_name TEXT NOT NULL,         -- Ensemble (serve) or Profile name (bench/eval)
     llama_version TEXT,
-    cli_command TEXT NOT NULL,           -- Hauptprozess-Aufruf, as-is rekonstruiert
-    startup_params TEXT NOT NULL,        -- Kanonisierte Startparameter des Hauptprozesses
-    preset_path TEXT,                    -- Router-Preset, falls --models-preset verwendet wurde
-    preset_content TEXT,                 -- exakter INI-Inhalt zum Laufzeitpunkt
-    preset_sha256 TEXT                   -- Hash für schnellen Vergleich / Reproduzierbarkeit
+    cli_command TEXT NOT NULL,           -- Main process call, reconstructed as-is
+    startup_params TEXT NOT NULL,        -- Canonicalized startup parameters of the main process
+    preset_path TEXT,                    -- Router preset, if --models-preset was used
+    preset_content TEXT,                 -- exact INI content at runtime
+    preset_sha256 TEXT                   -- Hash for quick comparison / reproducibility
 );
 
 CREATE TABLE IF NOT EXISTS serve_model_instances (
@@ -25,10 +25,10 @@ CREATE TABLE IF NOT EXISTS serve_model_instances (
     unloaded_at DATETIME,
     model_alias TEXT NOT NULL,
     child_port INTEGER,
-    declared_params TEXT NOT NULL DEFAULT '{}',       -- aus Profil/Ensemble kompilierte Modellsektion
-    effective_args TEXT NOT NULL DEFAULT '{}',        -- von llama.cpp geloggte Child-Server-Args
-    effective_cli_command TEXT,                       -- Child-Aufruf, aus Log rekonstruiert
-    meta_json TEXT NOT NULL DEFAULT '{}',             -- cmd_child_to_router:info JSON, falls vorhanden
+    declared_params TEXT NOT NULL DEFAULT '{}',       -- model section compiled from profile/ensemble
+    effective_args TEXT NOT NULL DEFAULT '{}',        -- Child-server args logged by llama.cpp
+    effective_cli_command TEXT,                       -- Child call, reconstructed from log
+    meta_json TEXT NOT NULL DEFAULT '{}',             -- cmd_child_to_router:info JSON, if present
     status TEXT NOT NULL DEFAULT 'loaded',            -- loaded, unloaded, evicted, crashed
     FOREIGN KEY(run_id) REFERENCES execution_runs(run_id) ON DELETE CASCADE
 );
@@ -91,31 +91,31 @@ CREATE TABLE IF NOT EXISTS metrics_lifecycle (
     FOREIGN KEY(runtime_instance_id) REFERENCES serve_model_instances(id) ON DELETE SET NULL
 );
 
--- Proxy-Request-Log: was Clients tatsächlich anfragen (Parameter, Tokens, Latenz).
--- Wird befüllt wenn Clients über den Dispatcher-Port (nicht direkt an llama.cpp) verbinden.
+-- Proxy-Request-Log: what clients actually request (Parameters, Tokens, Latency).
+-- Filled when clients connect via the Dispatcher port (not directly to llama.cpp).
 CREATE TABLE IF NOT EXISTS metrics_proxy_requests (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     machine_id TEXT NOT NULL DEFAULT 'unknown',
-    run_id TEXT,                          -- aktiver execution_runs.run_id, nullable
+    run_id TEXT,                          -- active execution_runs.run_id, nullable
     timestamp DATETIME,
-    endpoint TEXT NOT NULL,               -- z.B. 'chat/completions', 'completions'
-    model_requested TEXT,                 -- was der Client im Feld 'model' schickte
+    endpoint TEXT NOT NULL,               -- e.g. 'chat/completions', 'completions'
+    model_requested TEXT,                 -- what the client sent in the 'model' field
     stream INTEGER NOT NULL DEFAULT 0,    -- 0/1
-    -- Vom Client explizit gesendete Sampling-Parameter (NULL = Client hat es nicht gesetzt)
+    -- Sampling parameters explicitly sent by the client (NULL = client did not set it)
     req_temperature REAL,
     req_top_p REAL,
     req_top_k INTEGER,
     req_min_p REAL,
     req_max_tokens INTEGER,
-    req_enable_thinking INTEGER,          -- aus chat_template_kwargs.enable_thinking (0/1)
-    -- Antwort-Statistiken (aus Response-Body extrahiert)
+    req_enable_thinking INTEGER,          -- from chat_template_kwargs.enable_thinking (0/1)
+    -- Response statistics (extracted from Response-Body)
     prompt_tokens INTEGER,
     completion_tokens INTEGER,
-    finish_reason TEXT,                   -- stop, length, tool_calls, …
-    duration REAL,                        -- Gesamtdauer Request→letzter Chunk (Sekunden)
-    ttft REAL,                            -- Time-to-first-token (Sekunden)
+    finish_reason TEXT,                   -- stop, length, tool_calls, ...
+    duration REAL,                        -- total duration Request→last chunk (seconds)
+    ttft REAL,                            -- Time-to-first-token (seconds)
     status_code INTEGER,
-    injected_params TEXT,                 -- JSON: Parameter die vom Profil überschrieben wurden
+    injected_params TEXT,                 -- JSON: parameters overwritten by the profile
     FOREIGN KEY(run_id) REFERENCES execution_runs(run_id) ON DELETE SET NULL
 );
 

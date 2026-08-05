@@ -42,8 +42,8 @@ DEFAULTS_DIR: Path = PROJECT_ROOT / "defaults"
 
 def _resolve_instance(instance_name: str) -> tuple[str, Path]:
     """
-    Liest instance.yaml aus instances/<name>/ und gibt (machine_guid, instance_dir) zurück.
-    Legt Verzeichnis und instance.yaml an, falls noch nicht vorhanden (Erststart).
+    Reads instance.yaml from instances/<name>/ and returns (machine_guid, instance_dir).
+    Creates directory and instance.yaml if not already present (first run).
     """
     instance_dir = PROJECT_ROOT / "instances" / instance_name
     config_file = instance_dir / "instance.yaml"
@@ -64,8 +64,8 @@ def _resolve_instance(instance_name: str) -> tuple[str, Path]:
     config = {"nickname": instance_name, "machine_guid": machine_guid}
     with open(config_file, "w", encoding="utf-8") as f:
         yaml.dump(config, f, default_flow_style=False, allow_unicode=True, sort_keys=False)
-    print(f"[INSTANCE] Neue Instanz '{instance_name}' erstellt: {instance_dir}")
-    print(f"[INSTANCE] GUID={machine_guid}  (in {config_file} gespeichert)")
+    print(f"[INSTANCE] New instance '{instance_name}' created: {instance_dir}")
+    print(f"[INSTANCE] GUID={machine_guid}  (saved in {config_file})")
     return machine_guid, instance_dir
 
 
@@ -191,7 +191,7 @@ SINGLE_DASH_EXCEPTIONS = {"pg", "cb", "ctk", "ctv", "lv"}
 
 
 def _deep_merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:
-    """Merged override rekursiv in base. Verschachtelte Dicts werden zusammengeführt."""
+    """Merged override recursively into base. Nested dicts are merged."""
     result = base.copy()
     for k, v in override.items():
         if k in result and isinstance(result[k], dict) and isinstance(v, dict):
@@ -202,7 +202,7 @@ def _deep_merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any
 
 
 def canonical_key(key: str) -> str:
-    """Normalisiert YAML-/CLI-Schlüssel auf llama.cpp-Argumentnamen ohne führende Dashes."""
+    """Normalizes YAML-/CLI keys to llama.cpp argument names without leading dashes."""
     clean = str(key).strip().lstrip("-").replace("_", "-")
     return PARAM_MAPPING.get(clean, PARAM_MAPPING.get(clean.replace("-", "_"), clean))
 
@@ -233,7 +233,7 @@ def canonicalize_params(params: dict[str, Any]) -> dict[str, Any]:
 
 
 def ini_scalar(value: Any, key: str | None = None) -> str:
-    """Schreibt Werte so, wie llama.cpp-INI sie erwartet: schlicht, ohne Python-Repräsentation."""
+    """Writes values as llama.cpp-INI expects them: simple, without Python representation."""
     if isinstance(value, bool):
         # llama.cpp dokumentiert -fa/--flash-attn als on|off|auto; boolsche Flags wie jinja
         # bleiben true|false. Das vermeidet genau die Sorte stiller Syntaxfehler,
@@ -281,11 +281,11 @@ class LlamaOrchestrator:
         base = Path(folder)
         path = base / f"{name}.yaml"
         if not path.exists():
-            raise FileNotFoundError(f"Konfiguration '{path}' nicht gefunden.")
+            raise FileNotFoundError(f"Configuration '{path}' not found.")
         with open(path, "r", encoding="utf-8") as f:
             data = yaml.safe_load(f) or {}
         if not isinstance(data, dict):
-            raise ValueError(f"Konfiguration '{path}' muss ein YAML-Objekt enthalten.")
+            raise ValueError(f"Configuration '{path}' must contain a YAML object.")
         return data
 
     def load_profile(self, profile_name: str) -> dict:
@@ -307,9 +307,9 @@ class LlamaOrchestrator:
         """
         profile = self.load_yaml(PROFILES_DIR, profile_name)
 
-        # Neue Syntax: defaults.model / defaults.engine
+        # New syntax: defaults.model / defaults.engine
         defaults_cfg: dict[str, Any] = profile.get("defaults") or {}
-        # Alte Syntax (deprecated): extends / default_profile → wird zu defaults.model gemappt
+        # Old syntax (deprecated): extends / default_profile -> mapped to defaults.model
         if not defaults_cfg:
             legacy = profile.get("extends") or profile.get("default_profile")
             if legacy:
@@ -345,13 +345,13 @@ class LlamaOrchestrator:
                     engine_defaults = yaml.safe_load(f) or {}
                 base = _deep_merge(base, engine_defaults)
             else:
-                print(f"[WARN] Engine-Konfig '{engine_name}' nicht gefunden "
-                      f"(gesucht in: {instance_engines}, {template_engines})")
+                print(f"[WARN] Engine config '{engine_name}' not found "
+                      f"(searched in: {instance_engines}, {template_engines})")
 
         # 3. Profil merged (höchste Priorität)
         merged = _deep_merge(base, profile) if base else dict(profile)
 
-        # Dispatcher-interne Schlüssel entfernen (fliessen nicht in llama.cpp-INI)
+        # Remove dispatcher-internal keys (they don't go into llama.cpp INI)
         for k in ("defaults", "extends", "default_profile"):
             merged.pop(k, None)
         return merged
@@ -446,7 +446,7 @@ class LlamaOrchestrator:
                 continue
             cleaned[key] = value
 
-        # In einem Ensemble soll standardmässig erst bei Bedarf geladen werden.
+        # In an ensemble, loading should only happen on demand by default.
         cleaned.setdefault("load-on-startup", False)
         return cleaned
 

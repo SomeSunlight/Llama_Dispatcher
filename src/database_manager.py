@@ -6,24 +6,23 @@ from typing import Any
 
 
 def _fmt_offset(ts: datetime.datetime) -> str:
-    """Formatiert ein timezone-aware datetime als 'YYYY-MM-DD HH:MM:SS+HH:MM'."""
+    """Formats a timezone-aware datetime as 'YYYY-MM-DD HH:MM:SS+HH:MM'."""
     s = ts.strftime("%Y-%m-%d %H:%M:%S%z")
-    # %z liefert '+0200', ISO 8601 braucht '+02:00'
+    # %z returns '+0200', ISO 8601 needs '+02:00'
     if len(s) > 19 and s[-5] in ("+", "-") and ":" not in s[-5:]:
         s = s[:-2] + ":" + s[-2:]
     return s
 
 
 def _now_local() -> str:
-    """Lokale Zeit mit korrektem UTC-Offset als DB-Timestamp-String.
+    """Local time with correct UTC offset as DB timestamp string.
 
-    Beispiel: '2026-06-15 09:21:00+02:00'
+    Example: '2026-06-15 09:21:00+02:00'
 
-    SQLite speichert Timestamps als TEXT. Durch den expliziten Offset ist die Zeit
-    timezone-aware, korrekt sortierbar und in jedem Viewer sofort lesbar –
-    ohne stille UTC-Verschiebung. Der SQL-Standard CURRENT_TIMESTAMP liefert
-    immer UTC ohne Markierung, was bei UTC+N-Systemen zu scheinbar falschen Zeiten
-    führt.
+    SQLite stores Timestamps as TEXT. Due to the explicit offset, the time
+    is timezone-aware, correctly sortable, and immediately readable in any viewer –
+    without silent UTC shifts. The SQL standard CURRENT_TIMESTAMP always returns
+    UTC without marking, which leads to seemingly incorrect times on UTC+N systems.
     """
     return _fmt_offset(datetime.datetime.now().astimezone())
 
@@ -39,7 +38,7 @@ class MetricsDatabase:
 
     def _init_db(self):
         if not self.sql_file.exists():
-            print(f"[WARNUNG] SQL-Init-Datei {self.sql_file} nicht gefunden. Schema-Erstellung übersprungen.")
+            print(f"[WARN] SQL-Init file {self.sql_file} not found. Skipping schema creation.")
             return
         with sqlite3.connect(self.db_path) as conn:
             conn.execute("PRAGMA foreign_keys = ON")
@@ -47,7 +46,7 @@ class MetricsDatabase:
                 conn.executescript(f.read())
 
     def _upgrade_schema(self):
-        """Fügt fehlende Spalten zu bestehenden Datenbanken hinzu (automatische Schema-Migration)."""
+        """Adds missing columns to existing databases (automatic schema migration)."""
         with sqlite3.connect(self.db_path) as conn:
             # v4 → v5: machine_id in execution_runs
             cols = [row[1] for row in conn.execute("PRAGMA table_info(execution_runs)")]
@@ -55,8 +54,8 @@ class MetricsDatabase:
                 conn.execute(
                     "ALTER TABLE execution_runs ADD COLUMN machine_id TEXT NOT NULL DEFAULT 'unknown'"
                 )
-                print("[DB] Schema-Upgrade v4→v5: machine_id-Spalte hinzugefügt.")
-            # v5 → v6: injected_params in metrics_proxy_requests (falls Tabelle existiert)
+                print("[DB] Schema upgrade v4→v5: machine_id column added.")
+            # v5 → v6: injected_params in metrics_proxy_requests (if table exists)
             tables = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
             if "metrics_proxy_requests" in tables:
                 pcols = [row[1] for row in conn.execute("PRAGMA table_info(metrics_proxy_requests)")]
@@ -64,7 +63,7 @@ class MetricsDatabase:
                     conn.execute(
                         "ALTER TABLE metrics_proxy_requests ADD COLUMN injected_params TEXT"
                     )
-                    print("[DB] Schema-Upgrade: injected_params-Spalte zu metrics_proxy_requests hinzugefügt.")
+                    print("[DB] Schema upgrade: injected_params column added to metrics_proxy_requests.")
 
     @staticmethod
     def _json(data: Any) -> str:
@@ -262,7 +261,7 @@ class MetricsDatabase:
         status_code: int,
         injected_params: str | None = None,
     ):
-        """Loggt einen proxied Client-Request mit Sampling-Parametern und Response-Stats."""
+        """Logs a proxied client request with sampling parameters and response stats."""
         with sqlite3.connect(self.db_path) as conn:
             conn.execute("PRAGMA foreign_keys = ON")
             conn.execute(
@@ -282,4 +281,3 @@ class MetricsDatabase:
                     duration, ttft, status_code, injected_params,
                 ),
             )
-

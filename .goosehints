@@ -1,0 +1,21 @@
+# Environment Constraints
+Operating System: Windows
+Primary Shell: PowerShell
+CRITICAL RULE: Do NOT write or execute Linux/Bash commands. The system cannot run bash, sh, or POSIX coreutils natively.
+
+# PowerShell Versioning
+- The modern PowerShell 7 is installed and MUST be invoked using the command `pwsh`.
+- Legacy Windows PowerShell 5.1 is invoked using the command `powershell`.
+- ALWAYS attempt to use `pwsh` first.
+
+# Strict Command Mappings
+- NEVER use `grep`. Use `Select-String` or `findstr`.
+- NEVER use `ls` or `ll`. Use `Get-ChildItem` or `dir`.
+- NEVER use `cat`. Use `Get-Content` or `type`.
+- NEVER use `rm` or `rm -rf`. Use `Remove-Item -Recurse -Force` or `del`.
+- NEVER use `touch`. Use `New-Item -ItemType File -Name <filename>`.
+- NEVER use `pwd`. Use `Get-Location` or `cd`.
+- NEVER use `export`. Use `$env:VAR_NAME = "value"`.
+
+# File System Constraints
+- Use backslashes `\` for file paths, unless a specific tool explicitly requires forward slashes.
