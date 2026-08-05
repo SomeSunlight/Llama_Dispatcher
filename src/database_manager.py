@@ -6,24 +6,23 @@ from typing import Any
 
 
 def _fmt_offset(ts: datetime.datetime) -> str:
-    """Formatiert ein timezone-aware datetime als 'YYYY-MM-DD HH:MM:SS+HH:MM'."""
+    """Formats a timezone-aware datetime as 'YYYY-MM-DD HH:MM:SS+HH:MM'."""
     s = ts.strftime("%Y-%m-%d %H:%M:%S%z")
-    # %z liefert '+0200', ISO 8601 braucht '+02:00'
+    # %z returns '+0200', ISO 8601 requires '+02:00'
     if len(s) > 19 and s[-5] in ("+", "-") and ":" not in s[-5:]:
         s = s[:-2] + ":" + s[-2:]
     return s
 
 
 def _now_local() -> str:
-    """Lokale Zeit mit korrektem UTC-Offset als DB-Timestamp-String.
+    """Local time with correct UTC offset as a DB timestamp string.
 
-    Beispiel: '2026-06-15 09:21:00+02:00'
+    Example: '2026-06-15 09:21:00+02:00'
 
-    SQLite speichert Timestamps als TEXT. Durch den expliziten Offset ist die Zeit
-    timezone-aware, korrekt sortierbar und in jedem Viewer sofort lesbar –
-    ohne stille UTC-Verschiebung. Der SQL-Standard CURRENT_TIMESTAMP liefert
-    immer UTC ohne Markierung, was bei UTC+N-Systemen zu scheinbar falschen Zeiten
-    führt.
+    SQLite stores timestamps as TEXT. The explicit offset makes the time
+    timezone-aware, correctly sortable and immediately readable in any viewer –
+    without silent UTC shifting. The SQL standard CURRENT_TIMESTAMP always returns
+    UTC without a marker, which leads to apparently wrong times on UTC+N systems.
     """
     return _fmt_offset(datetime.datetime.now().astimezone())
 
@@ -39,7 +38,7 @@ class MetricsDatabase:
 
     def _init_db(self):
         if not self.sql_file.exists():
-            print(f"[WARNUNG] SQL-Init-Datei {self.sql_file} nicht gefunden. Schema-Erstellung übersprungen.")
+            print(f"[WARNING] SQL init file {self.sql_file} not found. Schema creation skipped.")
             return
         with sqlite3.connect(self.db_path) as conn:
             conn.execute("PRAGMA foreign_keys = ON")
@@ -349,7 +348,7 @@ class MetricsDatabase:
                     prompt_tokens, completion_tokens, finish_reason, duration, ttft,
                     status_code, injected_params
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     self.machine_id, run_id, _now_local(), endpoint, model_requested,

@@ -24,22 +24,21 @@ from database_manager import MetricsDatabase
 
 app = FastAPI(title="Llama Dispatcher Control API")
 
-# Projektpfade: funktioniert sowohl als src/dispatcher.py als auch direkt im Projektroot.
+# Project paths: works both as src/dispatcher.py and directly in the project root.
 SCRIPT_DIR = Path(__file__).resolve().parent
 PROJECT_ROOT = SCRIPT_DIR.parent if SCRIPT_DIR.name == "src" else Path.cwd()
 SRC_DIR = PROJECT_ROOT / "src"
 
-# Pfade sind Defaults für Legacy-Modus (ohne --instance).
-# In main() werden sie bei Angabe von --instance auf den Instanz-Ordner umgebogen.
+# Paths are defaults for legacy mode (without --instance).
+# In main() they are redirected to the instance folder when --instance is specified.
 DATA_DIR: Path = PROJECT_ROOT / "data"
 PROFILES_DIR: Path = PROJECT_ROOT / "profiles"
 ENSEMBLES_DIR: Path = PROJECT_ROOT / "ensembles"
-# Modell-Hersteller-Defaults: immer im Haupt-Repo, nie instanzspezifisch.
+# Model vendor defaults: always in the main repo, never instance-specific.
 DEFAULTS_DIR: Path = PROJECT_ROOT / "defaults"
 
 
-# ── Instanz-Konfiguration ──────────────────────────────────────────────────────
-
+# ── Instance configuration ─────────────────────────────────────────────────────
 def _resolve_instance(instance_name: str) -> tuple[str, Path]:
     """
     Reads instance.yaml from instances/<name>/ and returns (machine_guid, instance_dir).
@@ -56,7 +55,7 @@ def _resolve_instance(instance_name: str) -> tuple[str, Path]:
         print(f"[INSTANCE] {nickname}  GUID={machine_guid}")
         return machine_guid, instance_dir
 
-    # Erststart: neue Instanz anlegen
+    # First run: create new instance
     machine_guid = str(uuid.uuid4())
     instance_dir.mkdir(parents=True, exist_ok=True)
     for sub in ("data", "profiles", "ensembles", "engines"):
@@ -70,12 +69,12 @@ def _resolve_instance(instance_name: str) -> tuple[str, Path]:
 
 
 class ServeRequest(BaseModel):
-    ensemble: str | None = Field(None, description="Name des Ensemble-YAMLs")
-    profile: str | None = Field(None, description="Name des Profil-YAMLs für klassischen Einzelmodell-Serve")
-    overrides: dict = Field(default_factory=dict, description="Flüchtige Parameter für die Engine")
+    ensemble: str | None = Field(None, description="Name of the ensemble YAML")
+    profile: str | None = Field(None, description="Name of the profile YAML for classic single-model serve")
+    overrides: dict = Field(default_factory=dict, description="Transient parameters for the engine")
 
 
-# Intern wird kanonisch ohne führende Dashes gespeichert/geschrieben.
+# Stored/written canonically without leading dashes internally.
 PARAM_MAPPING = {
     "c": "ctx-size",
     "ctx": "ctx-size",
@@ -128,11 +127,11 @@ PARAM_MAPPING = {
     "sampling_seq": "sampling-seq",
 }
 
-# Nur Convenience-Gruppen für YAML. Diese Schlüssel existieren nicht in llama.cpp selbst;
-# ihr Inhalt wird vor der Kanonisierung flach in die Modellparameter gemerged.
+# Convenience groups for YAML only. These keys do not exist in llama.cpp itself;
+# their contents are merged flat into the model parameters before canonicalization.
 MODEL_PARAM_GROUP_KEYS = {"sampling", "sampler", "generation", "defaults"}
 
-# Parameter, die der Router selbst bekommt, nicht die einzelnen Modellinstanzen.
+# Parameters that the router itself receives, not the individual model instances.
 ROUTER_PARAM_KEYS = {
     "host",
     "port",
@@ -155,7 +154,7 @@ ROUTER_PARAM_KEYS = {
     "verbose",
 }
 
-# Struktur-/Dispatcher-Schlüssel, die nie in llama.cpp-Presets gehören.
+# Structural/dispatcher keys that never belong in llama.cpp presets.
 DISPATCHER_ONLY_KEYS = {
     "bin-dir",
     "bin_dir",
@@ -166,18 +165,18 @@ DISPATCHER_ONLY_KEYS = {
     "preset_path",
     "models-preset",
     "models_preset",
-    "extends",         # Default-Profil-Referenz
-    "default_profile", # Alternative Schreibweise
+    "extends",         # Default profile reference
+    "default_profile", # Alternative spelling
 }
 
-# Parameter, die nur über den Proxy weitergegeben werden (nicht in die llama.cpp INI).
+# Parameters that are only forwarded via the proxy (not written to the llama.cpp INI).
 PROXY_ONLY_KEYS: frozenset[str] = frozenset({
-    "chat-template-kwargs",  # Kanonische Form von chat_template_kwargs
+    "chat-template-kwargs",  # Canonical form of chat_template_kwargs
 })
 
-# Request-Zeit Sampling-Parameter für den Proxy.
-# Diese werden aus dem Profil/Ensemble in jeden Client-Request injiziert.
-# Kanonische Form (Bindestriche); beim Injizieren ins JSON → Unterstriche.
+# Request-time sampling parameters for the proxy.
+# These are injected from the profile/ensemble into every client request.
+# Canonical form (hyphens); when injecting into JSON → underscores.
 REQUEST_SAMPLING_KEYS: frozenset[str] = frozenset({
     "temperature", "top-p", "top-k", "min-p",
     "repeat-penalty", "presence-penalty", "frequency-penalty", "typical-p",
@@ -209,15 +208,15 @@ def canonical_key(key: str) -> str:
 
 def flatten_model_param_groups(params: dict[str, Any]) -> dict[str, Any]:
     """
-    Erlaubt lesbare YAML-Gruppen wie:
+    Allows readable YAML groups like:
 
         sampling:
           temperature: 0.7
           top_p: 0.9
 
-    llama.cpp erwartet in der INI aber flache Argumentnamen. Deshalb werden diese
-    Gruppen hier vor der Kanonisierung ausgepackt. Bei Kollisionen gewinnt der
-    explizit flache Schlüssel im gleichen Dict.
+    llama.cpp expects flat argument names in the INI, however. Therefore these
+    groups are unpacked here before canonicalization. On collision the
+    explicitly flat key in the same dict wins.
     """
     flat: dict[str, Any] = {}
     for key, value in (params or {}).items():
@@ -235,9 +234,9 @@ def canonicalize_params(params: dict[str, Any]) -> dict[str, Any]:
 def ini_scalar(value: Any, key: str | None = None) -> str:
     """Writes values as llama.cpp-INI expects them: simple, without Python representation."""
     if isinstance(value, bool):
-        # llama.cpp dokumentiert -fa/--flash-attn als on|off|auto; boolsche Flags wie jinja
-        # bleiben true|false. Das vermeidet genau die Sorte stiller Syntaxfehler,
-        # die bei brandneuen CLI-Optionen lästig sind.
+        # llama.cpp documents -fa/--flash-attn as on|off|auto; boolean flags like jinja
+        # stay true|false. This avoids exactly the kind of silent syntax errors
+        # that are annoying with brand-new CLI options.
         if key in {"flash-attn", "reasoning"}:
             return "on" if value else "off"
         return "true" if value else "false"
@@ -245,7 +244,7 @@ def ini_scalar(value: Any, key: str | None = None) -> str:
 
 
 def quote_cmd(parts: list[str]) -> str:
-    """Lesbarer, kopierbarer CLI-String für DB/Logs."""
+    """Human-readable, copy-pasteable CLI string for DB/logs."""
     if os.name == "nt":
         import subprocess
 
@@ -257,24 +256,24 @@ class LlamaOrchestrator:
     def __init__(self, machine_id: str = "unknown"):
         self.current_process: asyncio.subprocess.Process | None = None
         self.is_running: bool = False
-        # Instanz-Modus (--instance): DATA_DIR = instances/<name>/data/ → metrics.db
-        # Legacy-Modus (kein --instance): DATA_DIR = data/ → metrics_v4.db (Abwärtskompatibilität)
+        # Instance mode (--instance): DATA_DIR = instances/<name>/data/ → metrics.db
+        # Legacy mode (no --instance): DATA_DIR = data/ → metrics_v4.db (backwards compatibility)
         db_filename = "metrics.db" if "instances" in DATA_DIR.parts else "metrics_v4.db"
         self.db = MetricsDatabase(DATA_DIR / db_filename, SRC_DIR / "init_db.sql", machine_id=machine_id)
         self.fail_count: int = 0
         self.server_task: asyncio.Task | None = None
-        self.api_port: int = 8001  # wird von main() gesetzt, für Startup-Log
+        self.api_port: int = 8001  # set by main(), used in startup log
         self._current_telemetry: dict = {}
         self.ansi_escape = re.compile(r"\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])")
-        # Proxy-State: wird beim Server-Start gesetzt, beim Stop gecleart
+        # Proxy state: set on server start, cleared on stop
         self._active_run_id: str | None = None
         self._proxy_target_port: int | None = None
         self._active_model_aliases: list[str] = []
-        # Sampling-Parameter pro Alias für Proxy-Injektion: {"workhorse": {"temperature": 1.0, ...}}
+        # Sampling parameters per alias for proxy injection: {"workhorse": {"temperature": 1.0, ...}}
         self._proxy_sampling_params: dict[str, dict[str, Any]] = {}
-        # Proxy-only Alias-Remapping: {"creative": "workhorse"} → Client ruft "creative" auf,
-        # Proxy injiziert dessen Sampling-Params und schreibt model→"workhorse" um.
-        # Kein eigener llama.cpp-Eintrag → ein Modell im VRAM, beliebig viele Aliase.
+        # Proxy-only alias remapping: {"creative": "workhorse"} → client calls "creative",
+        # proxy injects its sampling params and rewrites model→"workhorse".
+        # No separate llama.cpp entry → one model in VRAM, any number of aliases.
         self._proxy_alias_targets: dict[str, str] = {}
         # Dispatcher profile backing each public alias. Used for transparent request logging.
         self._proxy_profiles: dict[str, str] = {}
@@ -292,20 +291,20 @@ class LlamaOrchestrator:
 
     def load_profile(self, profile_name: str) -> dict:
         """
-        Lädt ein Profil und merged es mit Model- und Engine-Defaults.
+        Loads a profile and merges it with model and engine defaults.
 
-        Profile referenzieren Defaults über:
+        Profiles reference defaults via:
             defaults:
-              model:  "gemma"    → defaults/gemma.yaml               (sampling, hardware-agnostisch)
-              engine: "vulkan"   → instances/<name>/engines/vulkan.yaml  (bin_dir, maschinenspezifisch)
+              model:  "gemma"    → defaults/gemma.yaml               (sampling, hardware-agnostic)
+              engine: "vulkan"   → instances/<name>/engines/vulkan.yaml  (bin_dir, machine-specific)
 
-        Merge-Reihenfolge (niedrigste → höchste Priorität):
-          1. Model-Defaults   (defaults/<model>.yaml)
-          2. Engine-Defaults  (instances/<name>/engines/<engine>.yaml  oder engine-templates/ als Fallback)
-          3. Profil selbst
+        Merge order (lowest → highest priority):
+          1. Model defaults   (defaults/<model>.yaml)
+          2. Engine defaults  (instances/<name>/engines/<engine>.yaml  or engine-templates/ as fallback)
+          3. Profile itself
 
-        Rückwärtskompatibilität: altes 'extends: "gemma"' wird wie
-        'defaults: { model: "gemma" }' behandelt (kein Engine-Default).
+        Backwards compatibility: old 'extends: "gemma"' is treated like
+        'defaults: { model: "gemma" }' (no engine default).
         """
         profile = self.load_yaml(PROFILES_DIR, profile_name)
 
@@ -322,17 +321,17 @@ class LlamaOrchestrator:
 
         base: dict[str, Any] = {}
 
-        # 1. Model-Defaults laden (defaults/<model>.yaml)
+        # 1. Load model defaults (defaults/<model>.yaml)
         if model_name:
             model_file = DEFAULTS_DIR / f"{model_name}.yaml"
             if model_file.exists():
                 with open(model_file, "r", encoding="utf-8") as f:
                     base = yaml.safe_load(f) or {}
             else:
-                print(f"[WARN] Modell-Default '{model_name}' nicht gefunden: {model_file}")
+                print(f"[WARN] Model default '{model_name}' not found: {model_file}")
 
-        # 2. Engine-Defaults laden
-        #    Suchreihenfolge: instances/<name>/engines/ → defaults/engine-templates/ (Fallback)
+        # 2. Load engine defaults
+        #    Search order: instances/<name>/engines/ → defaults/engine-templates/ (fallback)
         if engine_name:
             instance_engines = PROFILES_DIR.parent / "engines"
             template_engines = DEFAULTS_DIR / "engine-templates"
@@ -350,7 +349,7 @@ class LlamaOrchestrator:
                 print(f"[WARN] Engine config '{engine_name}' not found "
                       f"(searched in: {instance_engines}, {template_engines})")
 
-        # 3. Profil merged (höchste Priorität)
+        # 3. Merge profile (highest priority)
         merged = _deep_merge(base, profile) if base else dict(profile)
 
         # Remove dispatcher-internal keys (they don't go into llama.cpp INI)
@@ -398,7 +397,7 @@ class LlamaOrchestrator:
             if key in engine:
                 add_arg(key, engine[key])
 
-        # Autoload soll standardmässig aktiv bleiben: dann lädt der Router auf Request nach.
+        # Autoload should remain active by default: the router then loads models on demand.
         if "models-autoload" in engine:
             add_arg("models-autoload", engine["models-autoload"])
         elif "no-models-autoload" in engine and engine["no-models-autoload"]:
@@ -418,9 +417,9 @@ class LlamaOrchestrator:
         merged: dict[str, Any] = {}
 
         def merge_source(source: dict[str, Any] | None):
-            # Flacht Convenience-Gruppen pro Quelle ab. Dadurch können common.sampling,
-            # serve.sampling und Ensemble-spezifische sampling-Overrides sauber
-            # übereinandergelegt werden, ohne sich als kompletter Dict-Wert zu ersetzen.
+            # Flattens convenience groups per source. This allows common.sampling,
+            # serve.sampling and ensemble-specific sampling overrides to be cleanly
+            # stacked on top of each other without replacing each other as a full dict value.
             merged.update(flatten_model_param_groups(source or {}))
 
         merge_source(profile.get("common", {}) or {})
@@ -428,7 +427,7 @@ class LlamaOrchestrator:
         merge_source(model_entry.get("params", {}) or {})
         merge_source(model_entry.get("overrides", {}) or {})
 
-        # Erlaubt kurze direkte Overrides im Ensemble-Eintrag:
+        # Allows short inline overrides in the ensemble entry:
         # - profile: normal_workhorse
         #   alias: workhorse
         #   c: 8192
@@ -481,12 +480,12 @@ class LlamaOrchestrator:
         preset_path.write_text("\n".join(lines), encoding="utf-8")
 
     def compile_serve_ensemble(self, ensemble_name: str, overrides: dict) -> tuple[str, dict, list]:
-        """Kompiliert Ensemble + Profile in eine offizielle llama.cpp Router-Preset-INI."""
+        """Compiles ensemble + profiles into an official llama.cpp router preset INI."""
         ensemble = self.load_yaml(ENSEMBLES_DIR, ensemble_name)
 
-        # defaults.engine auf Ensemble-Ebene: liefert bin_dir aus instances/<name>/engines/<engine>.yaml
-        # (analog zu defaults.engine in Profilen, aber hier für den Server-Start selbst).
-        # Suchreihenfolge: instances/<name>/engines/ → defaults/engine-templates/ (Fallback)
+        # defaults.engine at ensemble level: provides bin_dir from instances/<name>/engines/<engine>.yaml
+        # (analogous to defaults.engine in profiles, but here for the server start itself).
+        # Search order: instances/<name>/engines/ → defaults/engine-templates/ (fallback)
         ensemble_defaults: dict[str, Any] = ensemble.get("defaults") or {}
         engine_default_name: str | None = (
             ensemble_defaults.get("engine") if isinstance(ensemble_defaults, dict) else None
@@ -502,12 +501,12 @@ class LlamaOrchestrator:
                 if candidate.exists():
                     with open(candidate, "r", encoding="utf-8") as f:
                         engine_template = yaml.safe_load(f) or {}
-                    # Template als Basis; explizite engine:-Einträge im Ensemble überschreiben.
+                    # Template as base; explicit engine: entries in the ensemble override it.
                     engine = {**engine_template, **engine}
                     break
             else:
-                print(f"[WARN] Ensemble-Engine '{engine_default_name}' nicht gefunden "
-                      f"(gesucht in: {instance_engines}, {template_engines})")
+                print(f"[WARN] Ensemble engine '{engine_default_name}' not found "
+                      f"(searched in: {instance_engines}, {template_engines})")
 
         engine.update(overrides or {})
         engine = canonicalize_params(engine)
@@ -519,66 +518,65 @@ class LlamaOrchestrator:
         if not preset_path.is_absolute():
             preset_path = DATA_DIR / preset_path
 
-        # "defaults:" ist jetzt für Dispatcher-Konfiguration reserviert (defaults.engine).
-        # Modell-Defaults für die INI kommen ausschliesslich aus "model_defaults:".
+        # "defaults:" is now reserved for dispatcher configuration (defaults.engine).
+        # Model defaults for the INI come exclusively from "model_defaults:".
         global_params = canonicalize_params(
             flatten_model_param_groups(ensemble.get("model_defaults", {}) or {})
         )
-        models: dict[str, dict[str, Any]] = {}       # echte llama.cpp-Einträge
-        alias_targets: dict[str, str] = {}            # proxy-only: alias → llama.cpp-alias
+        models: dict[str, dict[str, Any]] = {}       # real llama.cpp entries
+        alias_targets: dict[str, str] = {}            # proxy-only: alias → llama.cpp alias
 
         for mod in ensemble.get("models", []) or []:
             if not isinstance(mod, dict) or "profile" not in mod:
-                raise ValueError("Jeder Eintrag in 'models' muss mindestens 'profile' enthalten.")
-
+                raise ValueError("Every entry in 'models' must contain at least 'profile'.")
             profile_name = mod["profile"]
             profile = self.load_profile(profile_name)
             alias = str(mod.get("alias") or profile_name)
             target = str(mod["target"]) if "target" in mod else None
 
             if alias in models or alias in alias_targets:
-                raise ValueError(f"Doppelter Modell-Alias im Ensemble '{ensemble_name}': {alias}")
+                raise ValueError(f"Duplicate model alias in ensemble '{ensemble_name}': {alias}")
 
             params = self._model_section_params(profile, mod)
 
             if target:
-                # Proxy-only: kein eigener INI-Eintrag, Anfragen werden auf target umgeleitet.
-                # Sampling-Params für diesen Alias werden trotzdem gespeichert (für Proxy-Injektion).
+                # Proxy-only: no separate INI entry, requests are redirected to target.
+                # Sampling params for this alias are still stored (for proxy injection).
                 alias_targets[alias] = target
             else:
                 has_model_source = any(k in params for k in ("model", "hf-repo", "model-url"))
                 alias_looks_like_cache_id = "/" in alias and ":" in alias
                 if not has_model_source and not alias_looks_like_cache_id:
                     raise ValueError(
-                        f"Modell '{alias}' aus Profil '{profile_name}' hat keine Quelle. "
-                        "Erwarte 'm/model', 'hf-repo' oder 'model-url' im Profil bzw. Ensemble-Eintrag."
+                        f"Model '{alias}' from profile '{profile_name}' has no source. "
+                        "Expected 'm/model', 'hf-repo' or 'model-url' in the profile or ensemble entry."
                     )
                 models[alias] = params
 
-        # Validierung: jeder target muss ein echtes Modell im Ensemble sein
+        # Validation: every target must be a real model in the ensemble
         for a, t in alias_targets.items():
             if t not in models:
                 raise ValueError(
-                    f"Alias '{a}' hat target='{t}', aber '{t}' ist kein (echtes) Modell "
-                    f"im Ensemble '{ensemble_name}'."
+                    f"Alias '{a}' has target='{t}', but '{t}' is not a (real) model "
+                    f"in ensemble '{ensemble_name}'."
                 )
 
         if not models:
-            raise ValueError(f"Ensemble '{ensemble_name}' enthält keine echten Modelle (ohne target:).")
+            raise ValueError(f"Ensemble '{ensemble_name}' contains no real models (without target:).")
 
         self._write_models_preset_ini(preset_path, global_params, models)
         cli_args = self._router_cli_args(engine, preset_path)
 
         preset_content = preset_path.read_text(encoding="utf-8")
 
-        # Proxy-Sampling-Parameter für ALLE Aliase (echte + proxy-only).
-        # REQUEST_SAMPLING_KEYS → konvertiert zu Unterstrichen für den JSON-Body.
+        # Proxy sampling parameters for ALL aliases (real + proxy-only).
+        # REQUEST_SAMPLING_KEYS → converted to underscores for the JSON body.
         proxy_sampling: dict[str, dict[str, Any]] = {}
         proxy_profiles: dict[str, str] = {}
         for m in ensemble.get("models", []) or []:
             a = str(m.get("alias") or m.get("profile"))
             proxy_profiles[a] = str(m["profile"])
-            # Für echte Aliase: params aus models-dict. Für proxy-only: nochmal berechnen.
+            # For real aliases: params from models dict. For proxy-only: recalculate.
             p = models.get(a) or self._model_section_params(
                 self.load_profile(m["profile"]), m
             )
@@ -607,10 +605,10 @@ class LlamaOrchestrator:
         return binary, compiled, cli_args
 
     def _params_to_cli_args(self, params: dict[str, Any], mode: str = "serve") -> list[str]:
-        """Übersetzt kanonisierte Parameter in llama.cpp CLI-Argumente.
+        """Translates canonicalized parameters into llama.cpp CLI arguments.
 
-        Wird für den klassischen Einzelprofil-Serve und weiterhin für Bench/Eval
-        verwendet. Der Router-/Ensemble-Modus erzeugt dagegen bewusst eine INI.
+        Used for classic single-profile serve and still for bench/eval.
+        The router/ensemble mode deliberately generates an INI instead.
         """
         cli_args: list[str] = []
         for key, value in params.items():
@@ -630,8 +628,8 @@ class LlamaOrchestrator:
             prefix = "-" if len(cli_key) == 1 or cli_key in SINGLE_DASH_EXCEPTIONS else "--"
 
             if isinstance(value, bool):
-                # llama.cpp erwartet bei einigen Tri-State/Bool-Argumenten einen Wert,
-                # bei klassischen Flags genügt die Präsenz des Arguments.
+                # llama.cpp expects a value for some tri-state/bool arguments,
+                # for classic flags the presence of the argument is sufficient.
                 if cli_key in {"flash-attn"}:
                     cli_args.extend([f"{prefix}{cli_key}", "on" if value else "off"])
                 elif cli_key.startswith("no-"):
@@ -652,11 +650,11 @@ class LlamaOrchestrator:
         return cli_args
 
     def compile_serve_profile(self, profile_name: str, overrides: dict) -> tuple[str, dict, list]:
-        """Klassischer Einzelmodell-Serve ohne Router-INI.
+        """Classic single-model serve without router INI.
 
-        Das ist absichtlich kein synthetisches Ensemble: Für Tests und direkte
-        Einzelkonfigurationen soll wieder genau ein llama-server-Prozess mit den
-        Parametern aus profile.common + profile.serve + CLI-Overrides starten.
+        This is intentionally not a synthetic ensemble: for tests and direct
+        single configurations exactly one llama-server process should start with
+        parameters from profile.common + profile.serve + CLI overrides.
         """
         profile = self.load_profile(profile_name)
 
@@ -687,7 +685,7 @@ class LlamaOrchestrator:
         return binary, compiled, cli_args
 
     def compile_task_profile(self, profile_name: str, mode: str, overrides: dict) -> tuple[str, dict, list]:
-        """Für Bench und Eval: Nutzt die bisherige Profil-Logik isoliert weiter."""
+        """For bench and eval: continues to use the existing profile logic in isolation."""
         config = self.load_profile(profile_name)
         merged = config.get("common", {}).copy()
         merged.update(config.get(mode, {}))
@@ -733,7 +731,7 @@ class LlamaOrchestrator:
         return binary, canonical_params, cli_args
 
     def _parse_child_args(self, argv: list[str]) -> dict[str, Any]:
-        """Parst die von llama.cpp geloggten Child-Server-Argumente in kanonische Langformen."""
+        """Parses llama.cpp-logged child server arguments into canonical long forms."""
         params: dict[str, Any] = {}
         i = 0
         while i < len(argv):
@@ -748,7 +746,7 @@ class LlamaOrchestrator:
                 i += 2
             else:
                 i += 1
-            # Mehrfach vorkommende Parameter, z. B. override-tensor, bleiben erhalten.
+            # Parameters that appear multiple times, e.g. override-tensor, are preserved.
             if key in params:
                 if not isinstance(params[key], list):
                     params[key] = [params[key]]
@@ -799,13 +797,13 @@ class LlamaOrchestrator:
         main_runtime_id: int | None = None,
         main_alias: str | None = None,
     ):
-        """Liest llama.cpp-Logs und erfasst Runtime-Instanzen plus Request-Timings.
+        """Reads llama.cpp logs and captures runtime instances plus request timings.
 
-        Wichtig: Client-Request-Parameter wie temperature/top_p werden im normalen
-        llama.cpp-Log nicht zuverlässig ausgegeben. Der Dispatcher protokolliert daher
-        nur beobachtbare Engine-/Runtime-Parameter und Timings, keine Client-Telemetrie.
-        CancelledError und KeyboardInterrupt werden sauber weitergereicht, damit der
-        aufrufende Loop den Transport freigeben kann, bevor die Event-Loop endet.
+        Important: client request parameters such as temperature/top_p are not reliably
+        output in the normal llama.cpp log. The dispatcher therefore only records
+        observable engine/runtime parameters and timings, no client telemetry.
+        CancelledError and KeyboardInterrupt are cleanly propagated so the
+        calling loop can release the transport before the event loop ends.
         """
         state: dict[str, Any] = {
             "declared_models": (compiled_params or {}).get("models", {}),
@@ -837,7 +835,7 @@ class LlamaOrchestrator:
             child_port = pid_match.group(1) if pid_match else None
             body = pid_match.group(2) if pid_match else clean_line
 
-            # Router: Child-Server wird mit Alias und Port gestartet.
+            # Router: child server is started with alias and port.
             spawn_match = re.search(r"spawning server instance with name=([^\s]+) on port (\d+)", clean_line)
             if spawn_match:
                 self._finalize_pending_spawn(run_id, state)
@@ -846,7 +844,7 @@ class LlamaOrchestrator:
                 state["alias_by_port"][str(port)] = alias
                 continue
 
-            # Danach loggt llama.cpp die konkrete Child-CLI zeilenweise.
+            # Afterwards llama.cpp logs the concrete child CLI line by line.
             if state.get("pending_spawn") and "spawning server instance with args:" in clean_line:
                 continue
 
@@ -879,7 +877,7 @@ class LlamaOrchestrator:
                 state["alias_by_port"][child_port] = alias
                 continue
 
-            # Optionaler JSON-Log-Modus: bleibt bewusst defensiv.
+            # Optional JSON log mode: deliberately kept defensive.
             try:
                 log_data = json.loads(clean_line)
                 msg = log_data.get("message", "").lower()
@@ -971,8 +969,8 @@ class LlamaOrchestrator:
                 state["task_telemetry"].pop(key, None)
                 continue
 
-            # Einzelne Child-Logs wie "loading model 'C:\...gguf'" beschreiben keine neue
-            # Router-Instanz; die Instanz wurde bereits beim spawning-Block erfasst.
+            # Individual child logs like "loading model 'C:\...gguf'" do not describe a new
+            # router instance; the instance was already captured in the spawning block.
 
             unload_match = re.search(r"(?:unload|evict).*model\s+([^\s]+)", clean_line, re.IGNORECASE)
             if unload_match:
@@ -994,7 +992,7 @@ class LlamaOrchestrator:
                 run_id = str(uuid.uuid4())
                 model_params = compiled_params["models"][profile_name]
 
-                # Proxy-State setzen
+                # Set proxy state
                 self._active_run_id = run_id
                 self._proxy_target_port = (
                     int(model_params["port"]) if str(model_params.get("port", "")).isdigit() else None
@@ -1060,12 +1058,12 @@ class LlamaOrchestrator:
 
                 uptime = asyncio.get_event_loop().time() - start_time
                 if uptime < 45.0:
-                    print(f"\n[FATAL] Server ist direkt beim Start abgestürzt ({uptime:.1f}s). Breche ab.")
+                    print(f"\n[FATAL] Server crashed immediately on startup ({uptime:.1f}s). Aborting.")
                     self.is_running = False
                     os._exit(1)
                 else:
                     self.fail_count = 0
-                    print("\n[ORCHESTRATOR] Server unerwartet beendet. Neustart in 5s...")
+                    print("\n[ORCHESTRATOR] Server terminated unexpectedly. Restarting in 5s...")
                     await asyncio.sleep(5)
             except (asyncio.CancelledError, KeyboardInterrupt):
                 self.is_running = False
@@ -1084,10 +1082,10 @@ class LlamaOrchestrator:
                 cmd_str = quote_cmd([binary] + cli_args)
                 run_id = str(uuid.uuid4())
 
-                # Proxy-State setzen
+                # Set proxy state
                 self._active_run_id = run_id
                 self._proxy_target_port = int(compiled_params["engine"].get("port", 8080))
-                # Alle sichtbaren Aliase für /v1/models: echte + proxy-only
+                # All visible aliases for /v1/models: real + proxy-only
                 self._active_model_aliases = (
                     list(compiled_params["models"].keys()) +
                     list(compiled_params.get("alias_targets", {}).keys())
@@ -1096,15 +1094,15 @@ class LlamaOrchestrator:
                 self._proxy_alias_targets = compiled_params.get("alias_targets", {})
                 self._proxy_profiles = compiled_params.get("proxy_profiles", {})
 
-                # Startup-Log: vollständige Proxy-Konfiguration auf einen Blick
-                print(f"\n[PROXY] Dispatcher-Port → llama.cpp-Port: "
+                # Startup log: full proxy configuration at a glance
+                print(f"\n[PROXY] Dispatcher port → llama.cpp port: "
                       f"Clients:{self.api_port}  llama.cpp:{self._proxy_target_port}")
-                print(f"[PROXY] Konfigurierte Aliase:")
+                print(f"[PROXY] Configured aliases:")
                 for alias in self._active_model_aliases:
                     target = self._proxy_alias_targets.get(alias)
                     sp = self._proxy_sampling_params.get(alias, {})
-                    kind = f"proxy-only → {target}" if target else "echt (im VRAM)"
-                    params_str = "  ".join(f"{k}={v}" for k, v in sp.items()) if sp else "(keine Overrides)"
+                    kind = f"proxy-only → {target}" if target else "real (in VRAM)"
+                    params_str = "  ".join(f"{k}={v}" for k, v in sp.items()) if sp else "(no overrides)"
                     print(f"[PROXY]   {alias:20s}  [{kind}]  {params_str}")
                 print(f"[PROXY] Debug:   GET  http://localhost:{self.api_port}/debug/config")
                 print(f"[PROXY] Preview: POST http://localhost:{self.api_port}/debug/preview")
@@ -1145,12 +1143,12 @@ class LlamaOrchestrator:
 
                 uptime = asyncio.get_event_loop().time() - start_time
                 if uptime < 15.0:
-                    print(f"\n[FATAL] Server ist direkt beim Start abgestürzt ({uptime:.1f}s). Breche ab.")
+                    print(f"\n[FATAL] Server crashed immediately on startup ({uptime:.1f}s). Aborting.")
                     self.is_running = False
                     os._exit(1)
                 else:
                     self.fail_count = 0
-                    print("\n[ORCHESTRATOR] Server unerwartet beendet. Neustart in 5s...")
+                    print("\n[ORCHESTRATOR] Server terminated unexpectedly. Restarting in 5s...")
                     await asyncio.sleep(5)
             except (asyncio.CancelledError, KeyboardInterrupt):
                 self.is_running = False
@@ -1194,7 +1192,7 @@ class LlamaOrchestrator:
                         )
                         self.db.insert_bench(run_id, test_type, base_ctx, speed, speed_error)
         except (asyncio.CancelledError, KeyboardInterrupt):
-            print("\n[ORCHESTRATOR] Bench abgebrochen, beende Child-Prozess...")
+            print("\n[ORCHESTRATOR] Bench cancelled, terminating child process...")
             raise
         finally:
             await self.current_process.wait()
@@ -1232,7 +1230,7 @@ class LlamaOrchestrator:
                 elif re.search(r"Final estimate:.*?([0-9.]+)", line_str):
                     final_perplexity = float(re.search(r"Final estimate:.*?([0-9.]+)", line_str).group(1))
         except (asyncio.CancelledError, KeyboardInterrupt):
-            print("\n[ORCHESTRATOR] Eval abgebrochen, beende Child-Prozess...")
+            print("\n[ORCHESTRATOR] Eval cancelled, terminating child process...")
             raise
         finally:
             rc = await self.current_process.wait()
@@ -1244,10 +1242,10 @@ class LlamaOrchestrator:
 
 
 def _run_task_safe(coro, orc: "LlamaOrchestrator") -> None:
-    """Führt eine Bench/Eval-Coroutine aus und stellt sicher, dass beim Unterbrechen
-    (Ctrl+C / KeyboardInterrupt) der Child-Prozess sauber beendet und auf ihn gewartet
-    wird, BEVOR die Event-Loop geschlossen wird.  Das verhindert den
-    RuntimeError("Event loop is closed") im BaseSubprocessTransport-Destruktor.
+    """Runs a bench/eval coroutine and ensures that on interruption
+    (Ctrl+C / KeyboardInterrupt) the child process is cleanly terminated and awaited
+    BEFORE the event loop is closed. This prevents the
+    RuntimeError("Event loop is closed") in the BaseSubprocessTransport destructor.
     """
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
@@ -1255,15 +1253,15 @@ def _run_task_safe(coro, orc: "LlamaOrchestrator") -> None:
     try:
         loop.run_until_complete(task)
     except KeyboardInterrupt:
-        print("\n[ORCHESTRATOR] Unterbrechung empfangen, beende Child-Prozess...")
+        print("\n[ORCHESTRATOR] Interrupt received, terminating child process...")
         task.cancel()
-        # Child-Prozess sicher terminieren, falls er noch läuft.
+        # Safely terminate child process if still running.
         if orc.current_process is not None:
             try:
                 orc.current_process.terminate()
             except ProcessLookupError:
                 pass
-        # Warten bis Task und Child-Prozess wirklich fertig sind.
+        # Wait until task and child process are truly finished.
         try:
             loop.run_until_complete(asyncio.wait_for(task, timeout=15.0))
         except (asyncio.CancelledError, asyncio.TimeoutError, Exception):
@@ -1276,9 +1274,9 @@ def _run_task_safe(coro, orc: "LlamaOrchestrator") -> None:
                     orc.current_process.kill()
                 except Exception:
                     pass
-        print("[ORCHESTRATOR] Beendet.")
+        print("[ORCHESTRATOR] Done.")
     finally:
-        # Alle noch laufenden Tasks sauber abräumen, dann erst Loop schließen.
+        # Clean up all still-running tasks, then close the loop.
         try:
             pending = asyncio.all_tasks(loop)
             if pending:
@@ -1291,10 +1289,10 @@ def _run_task_safe(coro, orc: "LlamaOrchestrator") -> None:
 orchestrator: LlamaOrchestrator | None = None
 
 
-# ── Proxy-Hilfsfunktionen ──────────────────────────────────────────────────────
+# ── Proxy helper functions ─────────────────────────────────────────────────────
 
 def _extract_response_stats(obj: Any, stats: dict[str, Any]) -> None:
-    """Extrahiert Token-Counts und finish_reason aus einem llama.cpp-Antwort-Objekt."""
+    """Extracts token counts and finish_reason from a llama.cpp response object."""
     if not isinstance(obj, dict):
         return
     usage = obj.get("usage")
@@ -1311,7 +1309,7 @@ def _extract_response_stats(obj: Any, stats: dict[str, Any]) -> None:
 
 
 def _extract_thinking(req_data: dict) -> int | None:
-    """Liest enable_thinking aus chat_template_kwargs. Gibt 1, 0 oder None zurück."""
+    """Reads enable_thinking from chat_template_kwargs. Returns 1, 0 or None."""
     ctk = req_data.get("chat_template_kwargs")
     if isinstance(ctk, dict) and "enable_thinking" in ctk:
         return 1 if ctk["enable_thinking"] else 0
@@ -1354,13 +1352,13 @@ def _parameter_changes(
     return changes
 
 
-# ── Proxy-Endpoints (/v1/) ─────────────────────────────────────────────────────
+# ── Proxy endpoints (/v1/) ────────────────────────────────────────────────────
 
 @app.get("/v1/models")
 async def api_models():
     """
-    Gibt eine saubere Modell-Liste zurück – nur die konfigurierten Aliase,
-    keine internen llama.cpp-Pfade. Ersetzt die native /v1/models-Antwort.
+    Returns a clean model list – only the configured aliases,
+    no internal llama.cpp paths. Replaces the native /v1/models response.
     """
     assert orchestrator is not None
     aliases = orchestrator._active_model_aliases or []
@@ -1376,16 +1374,16 @@ async def api_models():
 @app.api_route("/v1/{path:path}", methods=["GET", "POST", "DELETE", "PUT", "OPTIONS"])
 async def proxy_to_llama(path: str, request: Request):
     """
-    Transparenter Proxy zu llama.cpp. Loggt Client-Parameter und Response-Statistiken
-    (Token-Counts, Latenz, TTFT, finish_reason, Sampling-Werte) in der Datenbank.
+    Transparent proxy to llama.cpp. Logs client parameters and response statistics
+    (token counts, latency, TTFT, finish_reason, sampling values) in the database.
 
-    Clients zeigen einfach auf http://<host>:<api-port>/v1/ statt direkt auf llama.cpp.
+    Clients simply point to http://<host>:<api-port>/v1/ instead of directly to llama.cpp.
     """
     assert orchestrator is not None
 
     if not orchestrator.is_running or orchestrator._proxy_target_port is None:
         return JSONResponse(
-            {"error": {"message": "Kein Modell aktiv – warte auf Server-Start.", "type": "server_error"}},
+            {"error": {"message": "No model active – waiting for server start.", "type": "server_error"}},
             status_code=503,
         )
 
@@ -1402,10 +1400,10 @@ async def proxy_to_llama(path: str, request: Request):
     client_model = req_data.get("model")
     is_stream = bool(req_data.get("stream", False))
 
-    # ── Parameter-Injektion aus Profil ────────────────────────────────────────
-    # Profil-Parameter haben immer Vorrang vor Client-Werten (für REQUEST_SAMPLING_KEYS
-    # und chat_template_kwargs). Alles andere (model, messages, stream, max_tokens,
-    # tools usw.) kommt unverändert vom Client.
+    # ── Parameter injection from profile ──────────────────────────────────────
+    # Profile parameters always take precedence over client values (for REQUEST_SAMPLING_KEYS
+    # and chat_template_kwargs). Everything else (model, messages, stream, max_tokens,
+    # tools, etc.) passes through unchanged from the client.
     model_alias = req_data.get("model", "")
     profile_params = orchestrator._proxy_sampling_params.get(model_alias, {})
     injected: dict[str, Any] = {}
@@ -1419,9 +1417,9 @@ async def proxy_to_llama(path: str, request: Request):
         body_bytes = json.dumps(modified_data, ensure_ascii=False).encode("utf-8")
         req_data = modified_data
 
-    # ── Alias-Remapping ───────────────────────────────────────────────────────
-    # Proxy-only Aliase existieren nur im Dispatcher; llama.cpp kennt nur den echten Alias.
-    # "creative" → Sampling-Params injiziert (oben) + model-Feld auf "workhorse" umschreiben.
+    # ── Alias remapping ───────────────────────────────────────────────────────
+    # Proxy-only aliases exist only in the dispatcher; llama.cpp only knows the real alias.
+    # "creative" → sampling params injected (above) + model field rewritten to "workhorse".
     llama_alias = orchestrator._proxy_alias_targets.get(model_alias, model_alias)
     if llama_alias != model_alias:
         remap_data = req_data.copy()
@@ -1438,7 +1436,7 @@ async def proxy_to_llama(path: str, request: Request):
     )
     injected_json: str | None = json.dumps(injected, ensure_ascii=False, sort_keys=True) if injected else None
 
-    # Host und content-length werden von httpx neu gesetzt
+    # Host and content-length are set anew by httpx
     forward_headers = {
         k: v for k, v in request.headers.items()
         if k.lower() not in {"host", "content-length", "transfer-encoding"}
@@ -1480,7 +1478,7 @@ async def proxy_to_llama(path: str, request: Request):
                             non_stream_buf.extend(chunk)
                         yield chunk
         finally:
-            # Nicht-Streaming: vollständige Antwort parsen
+            # Non-streaming: parse complete response
             if non_stream_buf:
                 try:
                     _extract_response_stats(
@@ -1488,7 +1486,7 @@ async def proxy_to_llama(path: str, request: Request):
                     )
                 except (json.JSONDecodeError, ValueError):
                     pass
-            # Immer loggen – auch bei Client-Disconnect (finally läuft immer)
+            # Always log – even on client disconnect (finally always runs)
             try:
                 orchestrator.db.insert_proxy_request(
                     run_id=orchestrator._active_run_id,
@@ -1518,22 +1516,22 @@ async def proxy_to_llama(path: str, request: Request):
                     injected_params=injected_json,
                 )
             except Exception as log_err:
-                print(f"[PROXY] Logging-Fehler: {log_err}")
+                print(f"[PROXY] Logging error: {log_err}")
 
     media_type = "text/event-stream" if is_stream else "application/json"
     return StreamingResponse(_stream_and_log(), media_type=media_type)
 
 
-# ── Debug-Endpoints ────────────────────────────────────────────────────────────
+# ── Debug endpoints ────────────────────────────────────────────────────────────
 
 @app.get("/debug/config")
 async def debug_config():
     """
-    Zeigt die aktuelle Proxy-Konfiguration:
-    - Welche Aliase Clients sehen
-    - Welche Parameter pro Alias injiziert werden
-    - Welche Aliase proxy-only sind (mit target-Remapping)
-    - Auf welchen Port llama.cpp lauscht
+    Shows the current proxy configuration:
+    - Which aliases clients see
+    - Which parameters are injected per alias
+    - Which aliases are proxy-only (with target remapping)
+    - On which port llama.cpp is listening
     """
     assert orchestrator is not None
     aliases_info = []
@@ -1556,39 +1554,39 @@ async def debug_config():
 @app.post("/debug/preview")
 async def debug_preview(request: Request):
     """
-    Simuliert die Proxy-Transformation eines Requests OHNE ihn weiterzuleiten.
+    Simulates the proxy transformation of a request WITHOUT forwarding it.
 
-    Schick denselben JSON-Body, den Open WebUI an /v1/chat/completions senden würde.
-    Zurückgegeben wird was der Proxy daraus machen würde:
-    - welche Parameter injiziert werden
-    - wie das model-Feld umgeschrieben wird
-    - der vollständige Body der an llama.cpp gehen würde
+    Send the same JSON body that Open WebUI would send to /v1/chat/completions.
+    The response shows what the proxy would do with it:
+    - which parameters are injected
+    - how the model field is rewritten
+    - the complete body that would be sent to llama.cpp
 
-    Beispiel (curl):
+    Example (curl):
       curl -s http://localhost:8001/debug/preview \\
         -H "Content-Type: application/json" \\
-        -d '{"model":"agent","messages":[{"role":"user","content":"Hallo"}],"temperature":0.9}'
+        -d '{"model":"agent","messages":[{"role":"user","content":"Hello"}],"temperature":0.9}'
     """
     assert orchestrator is not None
     body_bytes = await request.body()
     try:
         req_data: dict[str, Any] = json.loads(body_bytes) if body_bytes else {}
     except json.JSONDecodeError:
-        return JSONResponse({"error": "Ungültiger JSON-Body"}, status_code=400)
+        return JSONResponse({"error": "Invalid JSON body"}, status_code=400)
 
     model_alias = req_data.get("model", "")
     profile_params = orchestrator._proxy_sampling_params.get(model_alias, {})
     injected: dict[str, Any] = {}
     forwarded = req_data.copy()
 
-    # Sampling-Injektion (identisch zur echten Proxy-Logik)
+    # Sampling-injection (identical to real proxy logic)
     if profile_params:
         for k, v in profile_params.items():
             if req_data.get(k) != v:
                 injected[k] = {"from_profile": v, "client_sent": req_data.get(k)}
             forwarded[k] = v
 
-    # Alias-Remapping
+    # Alias-remapping
     llama_alias = orchestrator._proxy_alias_targets.get(model_alias, model_alias)
     alias_rewritten = llama_alias != model_alias
     if alias_rewritten:
@@ -1605,15 +1603,15 @@ async def debug_preview(request: Request):
                and k not in ("chat_template_kwargs",)
         },
         "forwarded_body": forwarded,
-        "note": "Dies ist eine Simulation – kein Request wurde an llama.cpp gesendet.",
+        "note": "This is a simulation – no request was sent to llama.cpp.",
     })
 
 
 @app.post("/switch")
 async def api_switch_ensemble(request: ServeRequest):
-    assert orchestrator is not None, "Orchestrator nicht initialisiert"
+    assert orchestrator is not None, "Orchestrator not initialized"
     if bool(request.ensemble) == bool(request.profile):
-        return {"status": "error", "message": "Bitte genau eines von 'ensemble' oder 'profile' angeben."}
+        return {"status": "error", "message": "Please specify exactly one of 'ensemble' or 'profile'."}
 
     if orchestrator.current_process:
         orchestrator.is_running = False
@@ -1633,7 +1631,7 @@ async def api_switch_ensemble(request: ServeRequest):
 
 @app.post("/stop")
 async def api_stop():
-    assert orchestrator is not None, "Orchestrator nicht initialisiert"
+    assert orchestrator is not None, "Orchestrator not initialized"
     if orchestrator.current_process and orchestrator.is_running:
         orchestrator.is_running = False
         orchestrator.current_process.terminate()
@@ -1675,33 +1673,33 @@ def main():
 
     parser = argparse.ArgumentParser(description="Llama Orchestrator (Compiler & Dispatcher)")
     parser.add_argument("mode", choices=["serve", "bench", "eval"])
-    parser.add_argument("--ensemble", help="Name der YAML in /ensembles (für 'serve' im Router-Modus)")
-    parser.add_argument("--profile", help="Name der YAML in /profiles (für 'serve' Einzelprofil, 'bench' und 'eval')")
+    parser.add_argument("--ensemble", help="Name of the YAML in /ensembles (for 'serve' in router mode)")
+    parser.add_argument("--profile", help="Name of the YAML in /profiles (for 'serve' single profile, 'bench' and 'eval')")
     parser.add_argument("--dataset", default="data/wikitext-2-raw.txt")
     parser.add_argument(
         "--api-port", type=int, default=None,
-        help="Port für die Dispatcher REST API (Default: dispatcher.port aus dem Ensemble, sonst 8001)",
+        help="Port for the dispatcher REST API (default: dispatcher.port from the ensemble, otherwise 8001)",
     )
     parser.add_argument(
         "--instance",
         default=None,
         metavar="NAME",
         help=(
-            "Instanzname (Ordner unter instances/, z. B. 'Laptop' oder 'Speedy'). "
-            "Setzt Pfade auf instances/<NAME>/profiles|ensembles|data/ "
-            "und liest die machine_guid aus instances/<NAME>/instance.yaml."
+            "Instance name (folder under instances/, e.g. 'Laptop' or 'Speedy'). "
+            "Sets paths to instances/<NAME>/profiles|ensembles|data/ "
+            "and reads the machine_guid from instances/<NAME>/instance.yaml."
         ),
     )
     parser.add_argument(
         "--compile-only",
         action="store_true",
-        help="Nur Ensemble/Profile zu llama.cpp-INI kompilieren und den Startbefehl anzeigen.",
+        help="Only compile ensemble/profile to llama.cpp INI and display the start command.",
     )
 
     args, unknown = parser.parse_known_args()
     overrides = parse_cli_overrides(unknown)
 
-    # ── Instanz auflösen und globale Pfade setzen ─────────────────────────────
+    # ── Resolve instance and set global paths ─────────────────────────────────
     machine_id = "unknown"
     if args.instance:
         machine_id, instance_dir = _resolve_instance(args.instance)
@@ -1711,14 +1709,14 @@ def main():
         for d in (DATA_DIR, PROFILES_DIR, ENSEMBLES_DIR):
             d.mkdir(parents=True, exist_ok=True)
     else:
-        # Legacy-Modus: ursprüngliche Verzeichnisstruktur
+        # Legacy mode: original directory structure
         for d in (DATA_DIR, PROFILES_DIR, ENSEMBLES_DIR):
             d.mkdir(parents=True, exist_ok=True)
 
-    # Orchestrator erst jetzt erstellen, damit die Pfade gesetzt sind
+    # Create orchestrator only now so that the paths are set
     orchestrator = LlamaOrchestrator(machine_id=machine_id)
 
-    # api_port: CLI-Argument hat Vorrang; Fallback auf dispatcher.port im Ensemble-YAML; dann 8001.
+    # api_port: CLI argument takes precedence; fallback to dispatcher.port in ensemble YAML; then 8001.
     api_port: int = args.api_port or 8001
     if args.api_port is None and args.ensemble:
         _ensemble_file = ENSEMBLES_DIR / f"{args.ensemble}.yaml"
@@ -1728,19 +1726,19 @@ def main():
             _dispatcher_cfg = _ensemble_raw.get("dispatcher") or {}
             api_port = int(_dispatcher_cfg.get("port") or _dispatcher_cfg.get("api_port") or 8001)
 
-    orchestrator.api_port = api_port  # für Startup-Log im run_server_loop
+    orchestrator.api_port = api_port  # for startup log
 
     if args.mode == "serve":
         if bool(args.ensemble) == bool(args.profile):
-            sys.exit("[FEHLER] 'serve' benötigt genau eines von --ensemble oder --profile")
+            sys.exit("[ERROR] 'serve' requires exactly one of --ensemble or --profile")
 
         if args.compile_only:
             if args.ensemble:
                 binary, compiled_params, cli_args = orchestrator.compile_serve_ensemble(args.ensemble, overrides)
-                print(f"[OK] Preset geschrieben: {compiled_params['preset_path']}")
+                print(f"[OK] Preset written: {compiled_params['preset_path']}")
             else:
                 binary, compiled_params, cli_args = orchestrator.compile_serve_profile(args.profile, overrides)
-                print(f"[OK] Profil kompiliert: {args.profile}")
+                print(f"[OK] Profile compiled: {args.profile}")
             print(quote_cmd([binary] + cli_args))
             return
 
@@ -1751,9 +1749,9 @@ def main():
             else:
                 orchestrator.server_task = asyncio.create_task(orchestrator.run_profile_server_loop(args.profile, overrides))
             yield
-            # Sauberer Shutdown: erst Prozess beenden und warten, dann Task canceln.
-            # Das verhindert die RuntimeError-Exception im BaseSubprocessTransport-Destruktor,
-            # die auftritt wenn die Event-Loop geschlossen wird bevor der Transport freigegeben wurde.
+            # Clean shutdown: terminate and await process first, then cancel task.
+            # This prevents the RuntimeError in the BaseSubprocessTransport destructor
+            # that occurs when the event loop is closed before the transport is released.
             orchestrator.is_running = False
             if orchestrator.current_process:
                 try:
@@ -1778,13 +1776,13 @@ def main():
 
     elif args.mode == "bench":
         if not args.profile:
-            sys.exit("[FEHLER] 'bench' benötigt das Argument --profile")
+            sys.exit("[ERROR] 'bench' requires the argument --profile")
         assert orchestrator is not None
         _run_task_safe(orchestrator.run_bench(args.profile, overrides), orchestrator)
 
     elif args.mode == "eval":
         if not args.profile:
-            sys.exit("[FEHLER] 'eval' benötigt das Argument --profile")
+            sys.exit("[ERROR] 'eval' requires the argument --profile")
         assert orchestrator is not None
         _run_task_safe(orchestrator.run_eval(args.profile, args.dataset, overrides), orchestrator)
 
