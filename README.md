@@ -7,6 +7,12 @@ An asynchronous orchestrator and intelligent proxy for `llama.cpp`. The Dispatch
 
 This separation enables: a single model in VRAM, but multiple "personalities" for different clients – centrally configured, not in the client.
 
+> **⚠️ Two ports are always running – do not mix them up!**
+> The **Dispatcher Proxy** (default `8001`) is where all clients must connect.
+> The **llama.cpp server** (default `8081`) is internal only.
+> Connecting a client to the wrong port gives you a working llama.cpp server – but without any virtual model aliases or Dispatcher features.
+> See [Section 9](#9-️-port-overview--do-not-mix-up-these-two-ports) for the full explanation.
+
 ---
 
 ## Table of Contents
@@ -19,13 +25,14 @@ This separation enables: a single model in VRAM, but multiple "personalities" fo
 6. [Engine Templates and Instance Engines](#6-engine-templates-and-instance-engines)
 7. [Ensemble Structure](#7-ensemble-structure)
 8. [The Proxy – Model Aliases and Parameter Injection](#8-the-proxy--model-aliases-and-parameter-injection)
-9. [Debug Endpoints](#9-debug-endpoints)
-10. [Serve Modes](#10-serve-modes)
-11. [Bench and Eval](#11-bench-and-eval)
-12. [Database](#12-database)
-13. [CLI Reference](#13-cli-reference)
-14. [Parameter Naming System](#14-parameter-naming-system)
-15. [Starting – Quick Reference](#15-starting--quick-reference)
+9. [⚠️ Port Overview – Do Not Mix Up These Two Ports!](#9-️-port-overview--do-not-mix-up-these-two-ports)
+10. [Debug Endpoints](#10-debug-endpoints)
+11. [Serve Modes](#11-serve-modes)
+12. [Bench and Eval](#12-bench-and-eval)
+13. [Database](#13-database)
+14. [CLI Reference](#14-cli-reference)
+15. [Parameter Naming System](#15-parameter-naming-system)
+16. [Starting – Quick Reference](#16-starting--quick-reference)
 
 ---
 
@@ -465,7 +472,61 @@ recorded and must not be invented.
 
 ---
 
-## 9. Debug Endpoints
+## 9. ⚠️ Port Overview – Do Not Mix Up These Two Ports!
+
+When the Dispatcher is running in Ensemble Mode, **two separate HTTP servers** are active simultaneously. These two ports serve fundamentally different purposes and must **never** be confused – especially when connecting clients or troubleshooting.
+
+| Port | Configured in | Who uses it | Purpose |
+|---|---|---|---|
+| **Dispatcher Proxy Port** (e.g. `8001`) | `ensemble.yaml` → `dispatcher.port` | **All clients** (Open WebUI, curl, any API client) | Virtual model aliases, parameter injection, telemetry |
+| **llama.cpp Server Port** (e.g. `8081`) | `ensemble.yaml` → `engine.port` | **Dispatcher only** (internal forwarding) | Real inference – not for direct client access |
+
+### What happens if a client connects to the wrong port?
+
+**Client connects to port `8081` (llama.cpp directly) – wrong!**
+
+- The llama.cpp web UI opens in the browser and looks perfectly fine.
+- `/v1/models` only shows **one** real model (e.g. `Sparringpartner`) – **no virtual proxy aliases** (e.g. `agent` is missing).
+- The Dispatcher's parameter injection does **not** happen.
+- Everything appears to work, but none of the Dispatcher features are active.
+- This is a silent failure that is very hard to spot. *(Hours of debugging were spent on exactly this issue.)*
+
+**Client connects to port `8001` (Dispatcher Proxy) – correct!**
+
+- `/v1/models` lists **all** configured aliases, including proxy-only models that exist only in VRAM as a single loaded model.
+- Parameter injection, `chat_template_kwargs`, and alias remapping are all active.
+- **There is no browser web UI** on this port – the Dispatcher does not provide one (unlike llama.cpp). This is not a bug; a web interface would need to be developed separately.
+
+### How to verify you are on the right port
+
+The quickest first test – paste this directly into a browser:
+
+```
+http://localhost:8001/v1/models
+```
+
+Expected response (JSON): a list with **all configured aliases** from the ensemble.
+If you only see one model, you are likely on the wrong port.
+
+```bash
+# Quick check via curl
+curl http://localhost:8001/v1/models
+curl http://localhost:8081/v1/models   # ← should NOT be used by clients
+```
+
+### Recommendations for testing
+
+1. **Browser first:** `http://localhost:8001/v1/models` – confirms the Proxy is up and all aliases are visible.
+2. **Simple API client second:** `curl` or a minimal Python script with the `/v1/chat/completions` endpoint. This is much faster to diagnose than a full UI.
+3. **Open WebUI:** Works, but the configuration is non-trivial (connection URL, model selection, API key handling). Only recommended for users already familiar with Open WebUI. Do not use it as a first debugging step.
+4. **Never point clients at the llama.cpp port directly** unless you intentionally want to bypass all Dispatcher features.
+
+> **Summary:** The Dispatcher Proxy port is for clients. The llama.cpp port is internal.
+> If your client cannot see the virtual model list, check the port first.
+
+---
+
+## 10. Debug Endpoints
 
 While the Dispatcher is running, two debug endpoints are available:
 
@@ -525,7 +586,7 @@ Shows the generated INI and the llama.cpp start command, but starts nothing.
 
 ---
 
-## 10. Serve Modes
+## 11. Serve Modes
 
 ### Ensemble Mode (Standard for operation)
 
@@ -552,7 +613,7 @@ Starts llama.cpp directly from the profile, without the router-INI. No proxy ali
 
 ---
 
-## 11. Bench and Eval
+## 12. Bench and Eval
 
 ```bash
 uv run src/dispatcher.py bench --profile Thinkpad_vulkan_gemma_26B_A4B --instance Laptop
@@ -564,7 +625,7 @@ uv run src/dispatcher.py eval  --profile Thinkpad_vulkan_gemma_26B_A4B --instanc
 
 ---
 
-## 12. Database
+## 13. Database
 
 Per instance: `instances/<name>/data/metrics.db` (not versioned).
 
@@ -593,7 +654,7 @@ All timestamps are timezone-aware: `YYYY-MM-DD HH:MM:SS+HH:MM` (local time with 
 
 ---
 
-## 13. CLI Reference
+## 14. CLI Reference
 
 ### Usage Syntax
 
@@ -646,7 +707,7 @@ Boolean flags are accepted as `true`/`false` or as a bare flag:
 
 ---
 
-## 14. Parameter Naming System
+## 15. Parameter Naming System
 
 ### The Problem
 
@@ -765,7 +826,7 @@ but does not appear in the llama.cpp-INI.
 
 ---
 
-## 15. Starting – Quick Reference
+## 16. Starting – Quick Reference
 
 ```bash
 # Start Ensemble (Proxy + llama.cpp)
