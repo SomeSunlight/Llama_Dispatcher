@@ -276,6 +276,8 @@ class LlamaOrchestrator:
         # Proxy injiziert dessen Sampling-Params und schreibt model→"workhorse" um.
         # Kein eigener llama.cpp-Eintrag → ein Modell im VRAM, beliebig viele Aliase.
         self._proxy_alias_targets: dict[str, str] = {}
+        # Dispatcher profile backing each public alias. Used for transparent request logging.
+        self._proxy_profiles: dict[str, str] = {}
 
     def load_yaml(self, folder: str | Path, name: str) -> dict:
         base = Path(folder)
@@ -572,8 +574,10 @@ class LlamaOrchestrator:
         # Proxy-Sampling-Parameter für ALLE Aliase (echte + proxy-only).
         # REQUEST_SAMPLING_KEYS → konvertiert zu Unterstrichen für den JSON-Body.
         proxy_sampling: dict[str, dict[str, Any]] = {}
+        proxy_profiles: dict[str, str] = {}
         for m in ensemble.get("models", []) or []:
             a = str(m.get("alias") or m.get("profile"))
+            proxy_profiles[a] = str(m["profile"])
             # Für echte Aliase: params aus models-dict. Für proxy-only: nochmal berechnen.
             p = models.get(a) or self._model_section_params(
                 self.load_profile(m["profile"]), m
@@ -598,6 +602,7 @@ class LlamaOrchestrator:
             "models": models,
             "alias_targets": alias_targets,
             "proxy_sampling": proxy_sampling,
+            "proxy_profiles": proxy_profiles,
         }
         return binary, compiled, cli_args
 
@@ -998,6 +1003,8 @@ class LlamaOrchestrator:
                 sp = {k.replace("-", "_"): v for k, v in model_params.items()
                       if k in REQUEST_SAMPLING_KEYS and v is not None}
                 self._proxy_sampling_params = {profile_name: sp} if sp else {}
+                self._proxy_alias_targets = {}
+                self._proxy_profiles = {profile_name: profile_name}
                 if sp:
                     print(f"[PROXY] {profile_name}: " + "  ".join(f"{k}={v}" for k, v in sp.items()))
 
@@ -1087,6 +1094,7 @@ class LlamaOrchestrator:
                 )
                 self._proxy_sampling_params = compiled_params.get("proxy_sampling", {})
                 self._proxy_alias_targets = compiled_params.get("alias_targets", {})
+                self._proxy_profiles = compiled_params.get("proxy_profiles", {})
 
                 # Startup-Log: vollständige Proxy-Konfiguration auf einen Blick
                 print(f"\n[PROXY] Dispatcher-Port → llama.cpp-Port: "
@@ -1310,6 +1318,42 @@ def _extract_thinking(req_data: dict) -> int | None:
     return None
 
 
+_REQUEST_CONTENT_KEYS = {"messages", "prompt", "input"}
+
+
+def _request_params_snapshot(req_data: dict[str, Any]) -> dict[str, Any]:
+    """Return request control parameters without prompt or conversation content."""
+    return {k: v for k, v in req_data.items() if k not in _REQUEST_CONTENT_KEYS}
+
+
+def _parameter_changes(
+    client_params: dict[str, Any],
+    effective_params: dict[str, Any],
+    client_model: str | None,
+    target_model: str | None,
+    resolved_profile: str | None,
+) -> dict[str, Any]:
+    """Describe Dispatcher transformations without claiming unknown config-layer provenance."""
+    changes: dict[str, Any] = {}
+    keys = set(client_params) | set(effective_params)
+    for key in sorted(keys):
+        client_value = client_params.get(key)
+        effective_value = effective_params.get(key)
+        if client_value == effective_value:
+            continue
+        source = "alias_target" if key == "model" and client_model != target_model else "dispatcher_policy"
+        item: dict[str, Any] = {
+            "client": client_value,
+            "effective": effective_value,
+            "source": source,
+        }
+        if source == "dispatcher_policy":
+            item["configured_for"] = client_model
+            item["resolved_profile"] = resolved_profile
+        changes[key] = item
+    return changes
+
+
 # ── Proxy-Endpoints (/v1/) ─────────────────────────────────────────────────────
 
 @app.get("/v1/models")
@@ -1353,6 +1397,9 @@ async def proxy_to_llama(path: str, request: Request):
         except json.JSONDecodeError:
             pass
 
+    # Preserve the untouched client-side control parameters before any mutation.
+    client_params = _request_params_snapshot(req_data)
+    client_model = req_data.get("model")
     is_stream = bool(req_data.get("stream", False))
 
     # ── Parameter-Injektion aus Profil ────────────────────────────────────────
@@ -1382,7 +1429,14 @@ async def proxy_to_llama(path: str, request: Request):
         body_bytes = json.dumps(remap_data, ensure_ascii=False).encode("utf-8")
         req_data = remap_data
 
-    injected_json: str | None = json.dumps(injected) if injected else None
+    resolved_profile = orchestrator._proxy_profiles.get(model_alias)
+    target_model = req_data.get("model")
+    alias_remapped = 1 if target_model != client_model else 0
+    effective_params = _request_params_snapshot(req_data)
+    parameter_changes = _parameter_changes(
+        client_params, effective_params, client_model, target_model, resolved_profile
+    )
+    injected_json: str | None = json.dumps(injected, ensure_ascii=False, sort_keys=True) if injected else None
 
     # Host und content-length werden von httpx neu gesetzt
     forward_headers = {
@@ -1439,7 +1493,11 @@ async def proxy_to_llama(path: str, request: Request):
                 orchestrator.db.insert_proxy_request(
                     run_id=orchestrator._active_run_id,
                     endpoint=path,
-                    model_requested=req_data.get("model"),
+                    model_requested=target_model,
+                    client_model=client_model,
+                    resolved_profile=resolved_profile,
+                    target_model=target_model,
+                    alias_remapped=alias_remapped,
                     stream=1 if is_stream else 0,
                     req_temperature=req_data.get("temperature"),
                     req_top_p=req_data.get("top_p"),
@@ -1447,6 +1505,10 @@ async def proxy_to_llama(path: str, request: Request):
                     req_min_p=req_data.get("min_p"),
                     req_max_tokens=req_data.get("max_tokens"),
                     req_enable_thinking=_extract_thinking(req_data),
+                    effective_repeat_penalty=req_data.get("repeat_penalty"),
+                    client_params=client_params,
+                    effective_params=effective_params,
+                    parameter_changes=parameter_changes,
                     prompt_tokens=stats.get("prompt_tokens"),
                     completion_tokens=stats.get("completion_tokens"),
                     finish_reason=stats.get("finish_reason"),
