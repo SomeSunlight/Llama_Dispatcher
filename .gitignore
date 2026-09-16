@@ -22,6 +22,11 @@ __pycache__/
 /data/open_webui_models.ini
 /data/thinkpad_models.ini
 
+# ContextCanon temporary/review state
+**/.context/onboarding/
+**/.context/candidates/
+contextcanon-onboarding/
+
 # --- Instance data (machine-specific, managed as git submodules) ---
 # Jede Instanz liegt unter instances/<name>/ und wird als Git-Submodul verwaltet.
 # instances/ wurde aus .gitignore entfernt, da sie nun als Submodule registriert sind.
