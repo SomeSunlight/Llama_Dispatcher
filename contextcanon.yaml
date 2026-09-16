@@ -1,0 +1,10 @@
+schema: contextcanon/config/v1
+repositories:
+  context-canon:
+    kind: git
+    location: https://github.com/SomeSunlight/context-canon.git
+    ref: main
+sources:
+  4ca9d92c-59f2-4b1f-b7b3-0e2ff91fd001:
+    repository: context-canon
+    path: nodes/library/foundation

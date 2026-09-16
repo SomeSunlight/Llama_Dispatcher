@@ -1,0 +1,118 @@
+# GENERATED ContextCanon machine state for Defaults.
+# Humans normally read CONTEXT.src.md or CONTEXT.md instead.
+# This file is deterministic compiler output and must not be edited manually.
+
+schema: contextcanon/v0
+compiler_version: "0.6.0"
+
+# Stable logical Node identity. The filesystem path is deliberately not identity.
+node:
+  id: "6be160b5-112b-459c-8355-17897d446c92"
+  name: "Defaults"
+  version: "0.1.0-draft"
+
+# Accepted semantic Parent packages. Locators are discovery metadata; build uses only exact pins.
+parents:
+  - id: "e3e6391b-6eb7-4b2a-ba1d-f969a65bbf08"
+    name: "Llama Dispatcher"
+    version: "0.1.0-draft"
+    locator: ".."
+    normalized_digest: "df766041a54764767cd3ee6bf254a030808df7a8c20ec9ae3c83f3853e5a8305"
+    package_digest: "ec8ca549a9905b2361cef49ad86774c4889381725f7815044ea4a82a361bfc6e"
+
+# Accepted reusable Source packages used by this build. Both digests are exact pins.
+sources: []
+
+# Effective imported Context origins, flattened through accepted Parent/Source packages.
+imports:
+  - id: "4ca9d92c-59f2-4b1f-b7b3-0e2ff91fd001"
+    name: "ContextCanon Foundation"
+    version: "0.2.0-draft"
+    normalized_digest: "62a1bc6b9fffa838fbdf2b434f9fd2057de38fb6017734115ae2fb3ed56c100e"
+    package_digest: "7da87dcee0e716db35b62935f9980d27dd06986af93e61d4d28eb59783a58b8c"
+    why: "Reuse the same proven workflow as for context-canon itself, which is a similar LLM-assisted project."
+  - id: "e3e6391b-6eb7-4b2a-ba1d-f969a65bbf08"
+    name: "Llama Dispatcher"
+    version: "0.1.0-draft"
+    normalized_digest: "df766041a54764767cd3ee6bf254a030808df7a8c20ec9ae3c83f3853e5a8305"
+    package_digest: "ec8ca549a9905b2361cef49ad86774c4889381725f7815044ea4a82a361bfc6e"
+
+# Elements authored in this Node's CONTEXT.src.md.
+local:
+  state: null
+  plan: null
+  rules: []
+  changes: []
+  topics: []
+
+# Compiled effective Rule/Topic view with provenance.
+official:
+  rules:
+    - {"id": "CC-001", "title": "One official package", "origin_node_id": "4ca9d92c-59f2-4b1f-b7b3-0e2ff91fd001", "origin_node_name": "ContextCanon Foundation", "local": false, "overrides": []}
+    - {"id": "CC-002", "title": "Edit source, not generated output", "origin_node_id": "4ca9d92c-59f2-4b1f-b7b3-0e2ff91fd001", "origin_node_name": "ContextCanon Foundation", "local": false, "overrides": []}
+    - {"id": "CC-003", "title": "Keep compiler bookkeeping out of the normal workflow", "origin_node_id": "4ca9d92c-59f2-4b1f-b7b3-0e2ff91fd001", "origin_node_name": "ContextCanon Foundation", "local": false, "overrides": []}
+    - {"id": "CC-004", "title": "No implicit Source precedence", "origin_node_id": "4ca9d92c-59f2-4b1f-b7b3-0e2ff91fd001", "origin_node_name": "ContextCanon Foundation", "local": false, "overrides": []}
+    - {"id": "CC-013", "title": "Parents are unordered", "origin_node_id": "4ca9d92c-59f2-4b1f-b7b3-0e2ff91fd001", "origin_node_name": "ContextCanon Foundation", "local": false, "overrides": []}
+    - {"id": "CC-005", "title": "Stable identity", "origin_node_id": "4ca9d92c-59f2-4b1f-b7b3-0e2ff91fd001", "origin_node_name": "ContextCanon Foundation", "local": false, "overrides": []}
+    - {"id": "CC-006", "title": "Publish IDs that children may reference", "origin_node_id": "4ca9d92c-59f2-4b1f-b7b3-0e2ff91fd001", "origin_node_name": "ContextCanon Foundation", "local": false, "overrides": []}
+    - {"id": "CC-007", "title": "Keep entry context small", "origin_node_id": "4ca9d92c-59f2-4b1f-b7b3-0e2ff91fd001", "origin_node_name": "ContextCanon Foundation", "local": false, "overrides": []}
+    - {"id": "CC-008", "title": "State stays local", "origin_node_id": "4ca9d92c-59f2-4b1f-b7b3-0e2ff91fd001", "origin_node_name": "ContextCanon Foundation", "local": false, "overrides": []}
+    - {"id": "CC-009", "title": "Canonical context is model- and harness-neutral", "origin_node_id": "4ca9d92c-59f2-4b1f-b7b3-0e2ff91fd001", "origin_node_name": "ContextCanon Foundation", "local": false, "overrides": []}
+    - {"id": "CC-012", "title": "Align Node roots with governed files", "origin_node_id": "4ca9d92c-59f2-4b1f-b7b3-0e2ff91fd001", "origin_node_name": "ContextCanon Foundation", "local": false, "overrides": []}
+    - {"id": "CC-010", "title": "Keep familiar repository documents useful", "origin_node_id": "4ca9d92c-59f2-4b1f-b7b3-0e2ff91fd001", "origin_node_name": "ContextCanon Foundation", "local": false, "overrides": []}
+    - {"id": "CC-011", "title": "Write for intelligent readers", "origin_node_id": "4ca9d92c-59f2-4b1f-b7b3-0e2ff91fd001", "origin_node_name": "ContextCanon Foundation", "local": false, "overrides": []}
+    - {"id": "ONB-B97F676A25A3", "title": "Keep configuration in its owning layer", "origin_node_id": "e3e6391b-6eb7-4b2a-ba1d-f969a65bbf08", "origin_node_name": "Llama Dispatcher", "local": false, "overrides": []}
+    - {"id": "ONB-D855038AE157", "title": "Configuration precedence", "origin_node_id": "e3e6391b-6eb7-4b2a-ba1d-f969a65bbf08", "origin_node_name": "Llama Dispatcher", "local": false, "overrides": []}
+    - {"id": "ONB-BEC5C7AA7DF9", "title": "Use uv for project dependency and execution workflows", "origin_node_id": "e3e6391b-6eb7-4b2a-ba1d-f969a65bbf08", "origin_node_name": "Llama Dispatcher", "local": false, "overrides": []}
+    - {"id": "ONB-B08B43994998", "title": "Separate observed, declared, and unknown facts", "origin_node_id": "e3e6391b-6eb7-4b2a-ba1d-f969a65bbf08", "origin_node_name": "Llama Dispatcher", "local": false, "overrides": []}
+    - {"id": "ONB-1C62845C8746", "title": "Configuration states intent", "origin_node_id": "e3e6391b-6eb7-4b2a-ba1d-f969a65bbf08", "origin_node_name": "Llama Dispatcher", "local": false, "overrides": []}
+    - {"id": "ONB-55B57FDB7635", "title": "Prefer small understandable changes", "origin_node_id": "e3e6391b-6eb7-4b2a-ba1d-f969a65bbf08", "origin_node_name": "Llama Dispatcher", "local": false, "overrides": []}
+  removed_rules: []
+  topic_ids: ["CC-TOPIC-AUTHORING", "CC-TOPIC-COMPOSITION", "CC-TOPIC-HARNESSES"]
+  resource_root: "CONTEXT/"
+
+# Topic edges are explicit: kind is resource or context-node; intent is required or optional.
+targets:
+  - topic: "CC-TOPIC-AUTHORING"
+    intent: "required"
+    kind: "resource"
+    locator: "CONTEXT/references/4ca9d92c-59f2-4b1f-b7b3-0e2ff91fd001/nodes/library/foundation/docs/official-context.md"
+    target_node_id: null
+    target_node_name: null
+  - topic: "CC-TOPIC-AUTHORING"
+    intent: "required"
+    kind: "resource"
+    locator: "CONTEXT/references/4ca9d92c-59f2-4b1f-b7b3-0e2ff91fd001/nodes/library/foundation/docs/source-format.md"
+    target_node_id: null
+    target_node_name: null
+  - topic: "CC-TOPIC-AUTHORING"
+    intent: "required"
+    kind: "resource"
+    locator: "CONTEXT/references/4ca9d92c-59f2-4b1f-b7b3-0e2ff91fd001/nodes/library/foundation/docs/topics.md"
+    target_node_id: null
+    target_node_name: null
+  - topic: "CC-TOPIC-COMPOSITION"
+    intent: "required"
+    kind: "resource"
+    locator: "CONTEXT/references/4ca9d92c-59f2-4b1f-b7b3-0e2ff91fd001/nodes/library/foundation/docs/composition.md"
+    target_node_id: null
+    target_node_name: null
+  - topic: "CC-TOPIC-HARNESSES"
+    intent: "required"
+    kind: "resource"
+    locator: "CONTEXT/references/4ca9d92c-59f2-4b1f-b7b3-0e2ff91fd001/nodes/library/foundation/docs/harnesses.md"
+    target_node_id: null
+    target_node_name: null
+
+# Mapping from author-facing Resource paths to generated package paths.
+resources:
+  - {"source": null, "published": "CONTEXT/references/4ca9d92c-59f2-4b1f-b7b3-0e2ff91fd001/nodes/library/foundation/docs/composition.md"}
+  - {"source": null, "published": "CONTEXT/references/4ca9d92c-59f2-4b1f-b7b3-0e2ff91fd001/nodes/library/foundation/docs/harnesses.md"}
+  - {"source": null, "published": "CONTEXT/references/4ca9d92c-59f2-4b1f-b7b3-0e2ff91fd001/nodes/library/foundation/docs/official-context.md"}
+  - {"source": null, "published": "CONTEXT/references/4ca9d92c-59f2-4b1f-b7b3-0e2ff91fd001/nodes/library/foundation/docs/source-format.md"}
+  - {"source": null, "published": "CONTEXT/references/4ca9d92c-59f2-4b1f-b7b3-0e2ff91fd001/nodes/library/foundation/docs/topics.md"}
+
+# Exact deterministic identities. package_digest covers CONTEXT.md plus CONTEXT/ resources.
+package:
+  normalized_digest: "0fde10d96b74d95c5774d49e6831cb03af89c13d41455f412c98c2bba7113d17"
+  package_digest: "7add5b0b02482f3387ec143305db3b623de36b631d46d06f00a725354d17db88"
