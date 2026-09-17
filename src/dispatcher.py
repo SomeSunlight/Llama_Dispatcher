@@ -12,6 +12,8 @@ import sys
 from pathlib import Path
 from typing import Any
 
+import yaml
+
 import dispatcher_core as core
 from engine_environment import (
     EngineEnvironmentError,
@@ -80,11 +82,12 @@ def install_runtime_overrides(bin_dir: str | None, model_root: str | None) -> No
         return original_canonicalize_params(filtered)
 
     def environment_for_config(config_folder: Path, config_name: str) -> dict[str, str]:
-        raw_config = original_load_yaml(
-            core.LlamaOrchestrator.__new__(core.LlamaOrchestrator),
-            config_folder,
-            config_name,
-        )
+        config_file = config_folder / f"{config_name}.yaml"
+        if not config_file.exists():
+            return {}
+        raw_config = yaml.safe_load(config_file.read_text(encoding="utf-8")) or {}
+        if not isinstance(raw_config, dict):
+            return {}
         engine_name = engine_name_from_config(raw_config)
         return load_engine_environment(
             engine_name,
