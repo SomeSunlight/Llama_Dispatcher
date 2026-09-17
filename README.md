@@ -97,6 +97,29 @@ git clone https://github.com/SomeSunlight/Llama_Dispatcher_Speedy.git instances/
 uv sync
 ```
 
+For one instance that is shared between Windows and WSL, keep machine-local paths out of the profile files. Use `${LLAMA_MODEL_ROOT}` for the common model directory and pass the concrete runtime paths when starting Dispatcher:
+
+```yaml
+common:
+  m: "${LLAMA_MODEL_ROOT}/gemma-4-26B.gguf"
+```
+
+```powershell
+# Windows example
+uv run src/dispatcher.py serve --ensemble thinkpad --instance Laptop `
+  --bin-dir 'C:\llama.cpp\server\server_07_SYCL' `
+  --model-root 'C:\AI_Models\LLM\GGUF_Raw'
+```
+
+```bash
+# WSL/Linux example
+uv run src/dispatcher.py serve --ensemble thinkpad --instance Laptop \
+  --bin-dir /home/user/.local/share/ai-workstation/local-inference/llama.cpp/builds/sycl-<commit>/build/bin \
+  --model-root /mnt/c/AI_Models/LLM/GGUF_Raw
+```
+
+`--bin-dir` and `--model-root` are explicit process-local overrides; they do not rewrite the instance repository. `--model-root` has precedence over the optional `LLAMA_MODEL_ROOT` environment fallback. If a configuration uses `${LLAMA_MODEL_ROOT}` and neither source is available, Dispatcher stops with a clear error instead of launching with an unresolved path. The environment variable is therefore a convenience for manual workflows, not a required hidden prerequisite.
+
 `instance.yaml` instance.yaml carries the machine identity used by metrics. If a requested instance does not exist, the Dispatcher currently creates the instance and assigns a new machine_guid automatically. Canonical identity and current creation behavior are maintained in [Project Context](CONTEXT.md). (To clarify, if in case of a unknown instance it would be better to stop, or to assist creating a new identity explicitly.)
 
 ### Daily Workflow after Configuration Changes
@@ -123,12 +146,12 @@ When using the instance layout, pass `--instance`; omitting it selects the legac
 
 ## 4. Configuration Cascade
 
-Configuration is layered from model defaults through the instance engine and profile to the ensemble entry; later layers override earlier ones. Profiles explicitly reference their model and engine defaults, and ad-hoc CLI overrides sit above the cascade. The canonical ownership and precedence rules are maintained in [Project Context](CONTEXT.md).
+Configuration is layered from model defaults through the instance engine and profile to the ensemble entry; later layers override earlier ones. Profiles explicitly reference their model and engine defaults, and ad-hoc CLI overrides sit above the cascade. Machine-local launch paths supplied by `--bin-dir` and `--model-root` are process-level runtime inputs and do not become persisted profile configuration. The canonical ownership and precedence rules are maintained in [Project Context](CONTEXT.md).
 ---
 
 ## 5. Profile Structure
 
-Profiles describe a model on specific hardware. They have three operational mode sections (`serve`, `bench`, `eval`) and one common section (`common`).
+Profiles describe a model on specific hardware. They have three operational mode sections (`serve`, `bench`, `eval`) and one common section (`common`). Portable profiles may use `${LLAMA_MODEL_ROOT}` rather than embedding an operating-system-specific absolute model directory.
 
 ```yaml
 # instances/Laptop/profiles/Thinkpad_vulkan_gemma_26B_A4B.yaml
@@ -140,7 +163,7 @@ defaults:
   engine: "vulkan"  # → instances/Laptop/engines/vulkan.yaml  (bin_dir, GPU flags)
 
 common:
-  m: "C:\\AI_Models\\gemma-4-26B.gguf"
+  m: "${LLAMA_MODEL_ROOT}/gemma-4-26B.gguf"
   c: 16384
   threads: 1
   cache-type-k: "q4_0"
@@ -176,7 +199,7 @@ eval:
 
 ## 6. Engine Templates and Instance Engines
 
-Engine files separate what is binary/hardware-specific from the model. They are embedded into the `common:` and `serve:` sections of the profile via **deep merge**.
+Engine files separate what is binary/hardware-specific from the model. They are embedded into the `common:` and `serve:` sections of the profile via **deep merge**. A standalone instance may keep a `bin_dir` fallback in its engine file, but launchers that manage llama.cpp builds should pass `--bin-dir` explicitly so the same instance can run unchanged on multiple operating systems.
 
 **Template** (Template under `defaults/engine-templates/`):
 ```yaml
@@ -200,7 +223,7 @@ serve:
   cache-ram: 0         # prevents Vulkan-specific crashes
 ```
 
-Search order: `instances/<name>/engines/` → `defaults/engine-templates/` (fallback).
+Search order: `instances/<name>/engines/` → `defaults/engine-templates/` (fallback). An explicit `--bin-dir` overrides the resulting binary directory only for the current process.
 
 ---
 
@@ -248,7 +271,7 @@ models:
 
 | Field | Meaning |
 |---|---|
-| `defaults.engine` | Reads `bin_dir` from the instance engine file |
+| `defaults.engine` | Reads `bin_dir` from the instance engine file unless `--bin-dir` overrides it for this process |
 | `dispatcher.port` | Port of the Dispatcher-Proxy (clients) |
 | `engine.port` | Port of llama.cpp (internal) |
 | `target: "alias"` | Proxy-only: no INI entry, rewritten to target alias |
@@ -544,6 +567,8 @@ uv run src/dispatcher.py <mode> [options] [llama.cpp-overrides...]
 | `--api-port PORT` | from Ensemble or `8001` | Port of the Dispatcher-Proxy. Overrides `dispatcher.port` in the ensemble YAML |
 | `--dataset PATH` | `data/wikitext-2-raw.txt` | Text file for `eval` (Perplexity) |
 | `--compile-only` | – | Compiles INI and shows the llama.cpp start command, but starts nothing |
+| `--bin-dir PATH` | Engine/profile `bin_dir` | Process-local llama.cpp binary directory. Explicit CLI value overrides persisted engine/profile paths |
+| `--model-root PATH` | `LLAMA_MODEL_ROOT` environment fallback | Expands `${LLAMA_MODEL_ROOT}` in portable YAML paths. CLI takes precedence over the optional environment fallback |
 
 ### Ad-hoc llama.cpp Overrides
 
@@ -647,7 +672,7 @@ Valid group keys: `sampling`, `sampler`, `generation`, `defaults`
 | `dry_penalty_last_n` | `dry-penalty-last-n` |
 | `dry_sequence_breaker` | `dry-sequence-breaker` |
 | `sampler_seq` | `sampler-seq` |
-| `sampling_seq` | `sampling-seq` |
+| `sampling_seq` | `sampler-seq` |
 | `hf_repo` | `hf-repo` |
 | `hf_file` | `hf-file` |
 | `model_url` | `model-url` |
@@ -684,6 +709,11 @@ but does not appear in the llama.cpp-INI.
 # Start Ensemble (Proxy + llama.cpp)
 uv run src/dispatcher.py serve --ensemble thinkpad --instance Laptop
 uv run src/dispatcher.py serve --ensemble 3090    --instance Speedy
+
+# Portable Windows/WSL start when runtime paths differ
+uv run src/dispatcher.py serve --ensemble thinkpad --instance Laptop \
+  --bin-dir /path/to/llama.cpp/build/bin \
+  --model-root /path/to/shared/models
 
 # Compile only, do not start
 uv run src/dispatcher.py serve --ensemble thinkpad --instance Laptop --compile-only
