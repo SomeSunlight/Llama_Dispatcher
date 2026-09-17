@@ -672,7 +672,7 @@ Valid group keys: `sampling`, `sampler`, `generation`, `defaults`
 | `dry_penalty_last_n` | `dry-penalty-last-n` |
 | `dry_sequence_breaker` | `dry-sequence-breaker` |
 | `sampler_seq` | `sampler-seq` |
-| `sampling_seq` | `sampler-seq` |
+| `sampling_seq` | `sampling-seq` |
 | `hf_repo` | `hf-repo` |
 | `hf_file` | `hf-file` |
 | `model_url` | `model-url` |
