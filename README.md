@@ -46,7 +46,7 @@ Llama_Dispatcher/
 │       ├── cuda.yaml
 │       ├── vulkan.yaml
 │       └── sycl.yaml
-├── instances/                 # NOT in the main repo (separate private Git)
+├── instances/                 # user-owned Git repos, ignored by Dispatcher core
 │   ├── Laptop/
 │   │   ├── instance.yaml      # machine_guid, nickname
 │   │   ├── engines/
@@ -72,69 +72,57 @@ Llama_Dispatcher/
 
 ## 3. Instance Concept and Git Separation
 
-Each machine has a private instance under `instances/<name>/`; machine-specific paths and operational data do not belong in the public Dispatcher repository. The canonical repository boundary is maintained in [Project Context](CONTEXT.md).
-| Repo | Visibility | Content |
-|---|---|---|
-| `SomeSunlight/Llama_Dispatcher` | Public | Code, Defaults, Documentation |
-| `SomeSunlight/Llama_Dispatcher_Laptop` | Private | Laptop profiles, Engines, Ensembles |
-| `SomeSunlight/Llama_Dispatcher_Speedy` | Private | Speedy profiles, Engines, Ensembles |
+Each runtime environment has its own instance under `instances/<name>/`. These directories are **independent, user-owned Git repositories**. The Dispatcher repository ignores their contents and does not register or manage them as Git submodules.
 
-### Fresh Install on a New Machine
+That boundary is intentional:
 
-The trick when cloning: `git clone <url> <target_directory>` allows a custom folder name –
-so the instance lands directly in the correct subdirectory without the GitHub repo name interfering.
+- Dispatcher core owns code, defaults and generic documentation.
+- An instance repository owns its identity (`machine_guid`), profiles, engines and ensembles.
+- Windows and WSL should use separate instance identities when their measurements must remain distinguishable, for example `Laptop_Win` and `Laptop_WSL`.
+- Machine-local binary and model roots are supplied at process start rather than hard-coded into profiles.
 
-```powershell
-# Step 1: Clone main repo
+### Fresh Install / Attach an Instance
+
+Clone the instance directly into the desired `instances/<name>` directory:
+
+```bash
 git clone https://github.com/SomeSunlight/Llama_Dispatcher.git
 cd Llama_Dispatcher
 
-# Step 2: Clone instance repos into the EXACT correct subdirectories
-git clone https://github.com/SomeSunlight/Llama_Dispatcher_Laptop.git instances/Laptop
-git clone https://github.com/SomeSunlight/Llama_Dispatcher_Speedy.git instances/Speedy
-
-# Step 3: Python environment
+git clone https://github.com/SomeSunlight/Llama_Dispatcher_Laptop_WSL.git instances/Laptop_WSL
 uv sync
 ```
 
-For one instance that is shared between Windows and WSL, keep machine-local paths out of the profile files. Use `${LLAMA_MODEL_ROOT}` for the common model directory and pass the concrete runtime paths when starting Dispatcher:
+No `git submodule` commands are required. Normal Git commands inside the instance repository are sufficient.
+
+Portable profiles use `${LLAMA_MODEL_ROOT}` for the common model directory:
 
 ```yaml
 common:
   m: "${LLAMA_MODEL_ROOT}/gemma-4-26B.gguf"
 ```
 
-```powershell
-# Windows example
-uv run src/dispatcher.py serve --ensemble thinkpad --instance Laptop `
-  --bin-dir 'C:\llama.cpp\server\server_07_SYCL' `
-  --model-root 'C:\AI_Models\LLM\GGUF_Raw'
-```
+The concrete runtime paths are supplied explicitly:
 
 ```bash
-# WSL/Linux example
-uv run src/dispatcher.py serve --ensemble thinkpad --instance Laptop \
-  --bin-dir /home/user/.local/share/ai-workstation/local-inference/llama.cpp/builds/sycl-<commit>/build/bin \
+uv run src/dispatcher.py serve --ensemble thinkpad-sycl --instance Laptop_WSL \
+  --bin-dir /path/to/llama.cpp/build/bin \
   --model-root /mnt/c/AI_Models/LLM/GGUF_Raw
 ```
 
-`--bin-dir` and `--model-root` are explicit process-local overrides; they do not rewrite the instance repository. `--model-root` has precedence over the optional `LLAMA_MODEL_ROOT` environment fallback. If a configuration uses `${LLAMA_MODEL_ROOT}` and neither source is available, Dispatcher stops with a clear error instead of launching with an unresolved path. The environment variable is therefore a convenience for manual workflows, not a required hidden prerequisite.
+`--bin-dir` and `--model-root` are process-local overrides and do not rewrite the instance repository. `--model-root` has precedence over the optional `LLAMA_MODEL_ROOT` environment fallback.
 
-`instance.yaml` instance.yaml carries the machine identity used by metrics. If a requested instance does not exist, the Dispatcher currently creates the instance and assigns a new machine_guid automatically. Canonical identity and current creation behavior are maintained in [Project Context](CONTEXT.md). (To clarify, if in case of a unknown instance it would be better to stop, or to assist creating a new identity explicitly.)
+`instance.yaml` carries the runtime identity used by metrics. Do not reuse the same `machine_guid` for distinct Windows and WSL instances if their measurements need to remain distinguishable.
 
 ### Daily Workflow after Configuration Changes
 
-```bash
-# Backup Laptop instance
-cd instances/Laptop
-git add .
-git commit -m "thinkpad: new agent alias configured"
-git push
+Work inside the instance like any ordinary Git repository:
 
-# Backup Speedy instance
-cd instances/Speedy
+```bash
+cd instances/Laptop_WSL
+git status
 git add .
-git commit -m "3090: context increased"
+git commit -m "Update Laptop WSL configuration"
 git push
 ```
 
@@ -730,12 +718,12 @@ curl http://localhost:8001/debug/preview \
 curl http://localhost:8001/v1/models
 
 # Backup instance (Laptop)
-cd instances/Laptop && git add . && git commit -m "Update" && git push
+cd instances/Laptop_WSL && git add . && git commit -m "Update" && git push
 
 # Fresh Install on a new machine (all 3 repos in one go)
 git clone https://github.com/SomeSunlight/Llama_Dispatcher.git
 cd Llama_Dispatcher
-git clone https://github.com/SomeSunlight/Llama_Dispatcher_Laptop.git instances/Laptop
-git clone https://github.com/SomeSunlight/Llama_Dispatcher_Speedy.git instances/Speedy
+git clone https://github.com/SomeSunlight/Llama_Dispatcher_Laptop_WSL.git instances/Laptop_WSL
+git clone https://github.com/SomeSunlight/Llama_Dispatcher_Speedy_Win.git instances/Speedy_Win
 uv sync
 ```
