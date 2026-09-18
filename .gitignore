@@ -27,7 +27,6 @@ __pycache__/
 **/.context/candidates/
 contextcanon-onboarding/
 
-# --- Instance data (machine-specific, managed as git submodules) ---
-# Jede Instanz liegt unter instances/<name>/ und wird als Git-Submodul verwaltet.
-# instances/ wurde aus .gitignore entfernt, da sie nun als Submodule registriert sind.
+# Instance repositories are user-owned and ignored by instances/.gitignore.
+# The Dispatcher core does not manage them as Git submodules.
 
