@@ -1157,6 +1157,17 @@ class LlamaOrchestrator:
                 raise
             except Exception as e:
                 print(f"[ORCHESTRATOR ERROR] {e}")
+                if self.current_process and self.current_process.returncode is None:
+                    self.current_process.terminate()
+                    try:
+                        await asyncio.wait_for(self.current_process.wait(), timeout=5.0)
+                    except asyncio.TimeoutError:
+                        self.current_process.kill()
+                        await self.current_process.wait()
+                self.current_process = None
+                self._active_run_id = None
+                self._proxy_target_port = None
+                self._proxy_alias_targets = {}
                 await asyncio.sleep(5)
 
     async def run_bench(self, profile_name: str, overrides: dict):
