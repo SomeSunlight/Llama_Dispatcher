@@ -880,6 +880,8 @@ class LlamaOrchestrator:
             # Optional JSON log mode: deliberately kept defensive.
             try:
                 log_data = json.loads(clean_line)
+                if not isinstance(log_data, dict):
+                    continue
                 msg = log_data.get("message", "").lower()
                 alias = log_data.get("model_alias", log_data.get("model", "router_model"))
                 runtime_id = state["runtime_by_alias"].get(alias)
