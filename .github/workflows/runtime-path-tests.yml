@@ -20,3 +20,8 @@ jobs:
         run: uv run --frozen python -m unittest discover -s tests -v
       - name: Compile Dispatcher entry points
         run: uv run --frozen python -m py_compile src/dispatcher.py src/dispatcher_core.py src/runtime_paths.py src/engine_environment.py
+      - name: Verify generated ContextCanon output
+        run: |
+          uvx --from git+https://github.com/SomeSunlight/context-canon.git@4f007eb9a2596a905cd716e2bbefe2351cd4ecdf contextcanon build .
+          uvx --from git+https://github.com/SomeSunlight/context-canon.git@4f007eb9a2596a905cd716e2bbefe2351cd4ecdf contextcanon check .
+          git diff --exit-code
