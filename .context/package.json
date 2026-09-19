@@ -2,14 +2,14 @@
   "changes": [],
   "compiler_version": "0.6.0",
   "digests": {
-    "normalized": "df766041a54764767cd3ee6bf254a030808df7a8c20ec9ae3c83f3853e5a8305",
-    "package": "ec8ca549a9905b2361cef49ad86774c4889381725f7815044ea4a82a361bfc6e"
+    "normalized": "af64bdb6fa9b369ef2701861d11c2438eeefbaaee18f14c3388f580c1f1a55c6",
+    "package": "38389bef7fde8517cf997798cbd6a4215a35dfdf2095223c7190fc09cf29e3a7"
   },
   "files": [
     {
       "path": "CONTEXT.md",
-      "sha256": "218c5b5b0d04329d552c1a498f9c025275bf9128720e5bad6615f7b925ea4d5f",
-      "size": 6456
+      "sha256": "25c08e2303c07f83b28f4a923a64c73f59a9726fd2a41f2fff4e272a8ed250ac",
+      "size": 7084
     },
     {
       "path": "CONTEXT/README.md",
@@ -55,7 +55,7 @@
   "node": {
     "id": "e3e6391b-6eb7-4b2a-ba1d-f969a65bbf08",
     "name": "Llama Dispatcher",
-    "version": "0.1.0-draft"
+    "version": "0.1.1-draft"
   },
   "parents": [],
   "removed_rules": [],
@@ -196,9 +196,9 @@
       "modifications": [],
       "origin_node_id": "e3e6391b-6eb7-4b2a-ba1d-f969a65bbf08",
       "origin_node_name": "Llama Dispatcher",
-      "statement": "Maintain each configuration fact once in the layer that owns it; do not put engine flags in profiles, model paths in engine files, or duplicate model sampling defaults.",
+      "statement": "Maintain each configuration fact once in the layer that owns it; do not put engine flags in profiles, model paths in engine files, or duplicate model sampling defaults. Shared instance configuration must not duplicate operating-system-specific runtime paths; launchers should supply machine-local binary and model roots explicitly, with environment variables only as documented optional fallbacks. Backend-specific process environment such as GPU-selection variables belongs in the engine configuration and is applied by Dispatcher when it launches llama.cpp rather than being required in the caller's shell. Instance repositories under `instances/<name>/` are user-owned independent Git repositories: Dispatcher core ignores their contents and must not register or manage them as Git submodules.",
       "title": "Keep configuration in its owning layer",
-      "why": "Clear ownership prevents conflicting configuration and repeated maintenance."
+      "why": "Clear ownership prevents conflicting configuration, repeated maintenance, and hidden ambient startup state."
     },
     {
       "group": "Onboarding placement",
