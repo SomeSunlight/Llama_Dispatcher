@@ -8,7 +8,7 @@
 > Edit [CONTEXT.src.md](CONTEXT.src.md) instead.
 
 **Node:** Llama Dispatcher  
-**Context version:** `0.1.0-draft`
+**Context version:** `0.1.1-draft`
 
 **Resulting imported Contexts:**
 
@@ -105,7 +105,7 @@ Write technical documentation in precise, plain prose for intelligent readers; i
 
 #### `ONB-B97F676A25A3` — Keep configuration in its owning layer
 
-Maintain each configuration fact once in the layer that owns it; do not put engine flags in profiles, model paths in engine files, or duplicate model sampling defaults.
+Maintain each configuration fact once in the layer that owns it; do not put engine flags in profiles, model paths in engine files, or duplicate model sampling defaults. Shared instance configuration must not duplicate operating-system-specific runtime paths; launchers should supply machine-local binary and model roots explicitly, with environment variables only as documented optional fallbacks. Backend-specific process environment such as GPU-selection variables belongs in the engine configuration and is applied by Dispatcher when it launches llama.cpp rather than being required in the caller's shell. Instance repositories under `instances/<name>/` are user-owned independent Git repositories: Dispatcher core ignores their contents and must not register or manage them as Git submodules.
 
 #### `ONB-D855038AE157` — Configuration precedence
 
