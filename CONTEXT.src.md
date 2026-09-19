@@ -1,5 +1,5 @@
 # Llama Dispatcher — Local Context Source
-<!-- ctx:node id="e3e6391b-6eb7-4b2a-ba1d-f969a65bbf08" name="Llama Dispatcher" version="0.1.0-draft" -->
+<!-- ctx:node id="e3e6391b-6eb7-4b2a-ba1d-f969a65bbf08" name="Llama Dispatcher" version="0.1.1-draft" -->
 
 ## Local Overview
 
@@ -21,8 +21,8 @@
 <!-- contextcanon-placement-rules:start -->
 ### Onboarding placement
 
-- **Keep configuration in its owning layer:** Maintain each configuration fact once in the layer that owns it; do not put engine flags in profiles, model paths in engine files, or duplicate model sampling defaults.
-  Why: Clear ownership prevents conflicting configuration and repeated maintenance.
+- **Keep configuration in its owning layer:** Maintain each configuration fact once in the layer that owns it; do not put engine flags in profiles, model paths in engine files, or duplicate model sampling defaults. Shared instance configuration must not duplicate operating-system-specific runtime paths; launchers should supply machine-local binary and model roots explicitly, with environment variables only as documented optional fallbacks. Backend-specific process environment such as GPU-selection variables belongs in the engine configuration and is applied by Dispatcher when it launches llama.cpp rather than being required in the caller's shell. Instance repositories under `instances/<name>/` are user-owned independent Git repositories: Dispatcher core ignores their contents and must not register or manage them as Git submodules.
+  Why: Clear ownership prevents conflicting configuration, repeated maintenance, and hidden ambient startup state.
   <!-- ctx:rule id="ONB-B97F676A25A3" -->
 
 - **Configuration precedence:** Configuration is deep-merged in this order: model defaults, instance engine defaults, profile, ensemble model entry; ad-hoc llama.cpp CLI overrides have highest priority.

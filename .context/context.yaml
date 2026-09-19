@@ -9,7 +9,7 @@ compiler_version: "0.6.0"
 node:
   id: "e3e6391b-6eb7-4b2a-ba1d-f969a65bbf08"
   name: "Llama Dispatcher"
-  version: "0.1.0-draft"
+  version: "0.1.1-draft"
 
 # Accepted semantic Parent packages. Locators are discovery metadata; build uses only exact pins.
 parents: []
@@ -115,5 +115,5 @@ resources:
 
 # Exact deterministic identities. package_digest covers CONTEXT.md plus CONTEXT/ resources.
 package:
-  normalized_digest: "df766041a54764767cd3ee6bf254a030808df7a8c20ec9ae3c83f3853e5a8305"
-  package_digest: "ec8ca549a9905b2361cef49ad86774c4889381725f7815044ea4a82a361bfc6e"
+  normalized_digest: "af64bdb6fa9b369ef2701861d11c2438eeefbaaee18f14c3388f580c1f1a55c6"
+  package_digest: "38389bef7fde8517cf997798cbd6a4215a35dfdf2095223c7190fc09cf29e3a7"

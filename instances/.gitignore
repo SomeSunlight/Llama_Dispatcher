@@ -1,3 +1,4 @@
-﻿# Generierte Lauf-Artefakte (nicht versionieren)
-*/data/*.db
-*/data/*.ini
+# User-owned Dispatcher instances live here as independent Git repositories.
+# The Dispatcher core must not track or manage their contents.
+*
+!.gitignore

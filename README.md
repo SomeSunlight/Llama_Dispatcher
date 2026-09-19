@@ -46,7 +46,7 @@ Llama_Dispatcher/
 │       ├── cuda.yaml
 │       ├── vulkan.yaml
 │       └── sycl.yaml
-├── instances/                 # NOT in the main repo (separate private Git)
+├── instances/                 # user-owned Git repos, ignored by Dispatcher core
 │   ├── Laptop/
 │   │   ├── instance.yaml      # machine_guid, nickname
 │   │   ├── engines/
@@ -72,46 +72,57 @@ Llama_Dispatcher/
 
 ## 3. Instance Concept and Git Separation
 
-Each machine has a private instance under `instances/<name>/`; machine-specific paths and operational data do not belong in the public Dispatcher repository. The canonical repository boundary is maintained in [Project Context](CONTEXT.md).
-| Repo | Visibility | Content |
-|---|---|---|
-| `SomeSunlight/Llama_Dispatcher` | Public | Code, Defaults, Documentation |
-| `SomeSunlight/Llama_Dispatcher_Laptop` | Private | Laptop profiles, Engines, Ensembles |
-| `SomeSunlight/Llama_Dispatcher_Speedy` | Private | Speedy profiles, Engines, Ensembles |
+Each runtime environment has its own instance under `instances/<name>/`. These directories are **independent, user-owned Git repositories**. The Dispatcher repository ignores their contents and does not register or manage them as Git submodules.
 
-### Fresh Install on a New Machine
+That boundary is intentional:
 
-The trick when cloning: `git clone <url> <target_directory>` allows a custom folder name –
-so the instance lands directly in the correct subdirectory without the GitHub repo name interfering.
+- Dispatcher core owns code, defaults and generic documentation.
+- An instance repository owns its identity (`machine_guid`), profiles, engines and ensembles.
+- Windows and WSL should use separate instance identities when their measurements must remain distinguishable, for example `Laptop_Win` and `Laptop_WSL`.
+- Machine-local binary and model roots are supplied at process start rather than hard-coded into profiles.
 
-```powershell
-# Step 1: Clone main repo
+### Fresh Install / Attach an Instance
+
+Clone the instance directly into the desired `instances/<name>` directory:
+
+```bash
 git clone https://github.com/SomeSunlight/Llama_Dispatcher.git
 cd Llama_Dispatcher
 
-# Step 2: Clone instance repos into the EXACT correct subdirectories
-git clone https://github.com/SomeSunlight/Llama_Dispatcher_Laptop.git instances/Laptop
-git clone https://github.com/SomeSunlight/Llama_Dispatcher_Speedy.git instances/Speedy
-
-# Step 3: Python environment
+git clone https://github.com/SomeSunlight/Llama_Dispatcher_Laptop_WSL.git instances/Laptop_WSL
 uv sync
 ```
 
-`instance.yaml` instance.yaml carries the machine identity used by metrics. If a requested instance does not exist, the Dispatcher currently creates the instance and assigns a new machine_guid automatically. Canonical identity and current creation behavior are maintained in [Project Context](CONTEXT.md). (To clarify, if in case of a unknown instance it would be better to stop, or to assist creating a new identity explicitly.)
+No `git submodule` commands are required. Normal Git commands inside the instance repository are sufficient.
+
+Portable profiles use `${LLAMA_MODEL_ROOT}` for the common model directory:
+
+```yaml
+common:
+  m: "${LLAMA_MODEL_ROOT}/gemma-4-26B.gguf"
+```
+
+The concrete runtime paths are supplied explicitly:
+
+```bash
+uv run src/dispatcher.py serve --ensemble thinkpad-sycl --instance Laptop_WSL \
+  --bin-dir /path/to/llama.cpp/build/bin \
+  --model-root /mnt/c/AI_Models/LLM/GGUF_Raw
+```
+
+`--bin-dir` and `--model-root` are process-local overrides and do not rewrite the instance repository. `--model-root` has precedence over the optional `LLAMA_MODEL_ROOT` environment fallback.
+
+`instance.yaml` carries the runtime identity used by metrics. Do not reuse the same `machine_guid` for distinct Windows and WSL instances if their measurements need to remain distinguishable.
 
 ### Daily Workflow after Configuration Changes
 
-```bash
-# Backup Laptop instance
-cd instances/Laptop
-git add .
-git commit -m "thinkpad: new agent alias configured"
-git push
+Work inside the instance like any ordinary Git repository:
 
-# Backup Speedy instance
-cd instances/Speedy
+```bash
+cd instances/Laptop_WSL
+git status
 git add .
-git commit -m "3090: context increased"
+git commit -m "Update Laptop WSL configuration"
 git push
 ```
 
@@ -123,12 +134,12 @@ When using the instance layout, pass `--instance`; omitting it selects the legac
 
 ## 4. Configuration Cascade
 
-Configuration is layered from model defaults through the instance engine and profile to the ensemble entry; later layers override earlier ones. Profiles explicitly reference their model and engine defaults, and ad-hoc CLI overrides sit above the cascade. The canonical ownership and precedence rules are maintained in [Project Context](CONTEXT.md).
+Configuration is layered from model defaults through the instance engine and profile to the ensemble entry; later layers override earlier ones. Profiles explicitly reference their model and engine defaults, and ad-hoc CLI overrides sit above the cascade. Machine-local launch paths supplied by `--bin-dir` and `--model-root` are process-level runtime inputs and do not become persisted profile configuration. The canonical ownership and precedence rules are maintained in [Project Context](CONTEXT.md).
 ---
 
 ## 5. Profile Structure
 
-Profiles describe a model on specific hardware. They have three operational mode sections (`serve`, `bench`, `eval`) and one common section (`common`).
+Profiles describe a model on specific hardware. They have three operational mode sections (`serve`, `bench`, `eval`) and one common section (`common`). Portable profiles may use `${LLAMA_MODEL_ROOT}` rather than embedding an operating-system-specific absolute model directory.
 
 ```yaml
 # instances/Laptop/profiles/Thinkpad_vulkan_gemma_26B_A4B.yaml
@@ -140,7 +151,7 @@ defaults:
   engine: "vulkan"  # → instances/Laptop/engines/vulkan.yaml  (bin_dir, GPU flags)
 
 common:
-  m: "C:\\AI_Models\\gemma-4-26B.gguf"
+  m: "${LLAMA_MODEL_ROOT}/gemma-4-26B.gguf"
   c: 16384
   threads: 1
   cache-type-k: "q4_0"
@@ -176,7 +187,7 @@ eval:
 
 ## 6. Engine Templates and Instance Engines
 
-Engine files separate what is binary/hardware-specific from the model. They are embedded into the `common:` and `serve:` sections of the profile via **deep merge**.
+Engine files separate what is binary/hardware-specific from the model. They are embedded into the `common:` and `serve:` sections of the profile via **deep merge**. A standalone instance may keep a `bin_dir` fallback in its engine file, but launchers that manage llama.cpp builds should pass `--bin-dir` explicitly so the same instance can run unchanged on multiple operating systems.
 
 **Template** (Template under `defaults/engine-templates/`):
 ```yaml
@@ -200,7 +211,7 @@ serve:
   cache-ram: 0         # prevents Vulkan-specific crashes
 ```
 
-Search order: `instances/<name>/engines/` → `defaults/engine-templates/` (fallback).
+Search order: `instances/<name>/engines/` → `defaults/engine-templates/` (fallback). An explicit `--bin-dir` overrides the resulting binary directory only for the current process.
 
 ---
 
@@ -248,7 +259,7 @@ models:
 
 | Field | Meaning |
 |---|---|
-| `defaults.engine` | Reads `bin_dir` from the instance engine file |
+| `defaults.engine` | Reads `bin_dir` from the instance engine file unless `--bin-dir` overrides it for this process |
 | `dispatcher.port` | Port of the Dispatcher-Proxy (clients) |
 | `engine.port` | Port of llama.cpp (internal) |
 | `target: "alias"` | Proxy-only: no INI entry, rewritten to target alias |
@@ -544,6 +555,8 @@ uv run src/dispatcher.py <mode> [options] [llama.cpp-overrides...]
 | `--api-port PORT` | from Ensemble or `8001` | Port of the Dispatcher-Proxy. Overrides `dispatcher.port` in the ensemble YAML |
 | `--dataset PATH` | `data/wikitext-2-raw.txt` | Text file for `eval` (Perplexity) |
 | `--compile-only` | – | Compiles INI and shows the llama.cpp start command, but starts nothing |
+| `--bin-dir PATH` | Engine/profile `bin_dir` | Process-local llama.cpp binary directory. Explicit CLI value overrides persisted engine/profile paths |
+| `--model-root PATH` | `LLAMA_MODEL_ROOT` environment fallback | Expands `${LLAMA_MODEL_ROOT}` in portable YAML paths. CLI takes precedence over the optional environment fallback |
 
 ### Ad-hoc llama.cpp Overrides
 
@@ -685,6 +698,11 @@ but does not appear in the llama.cpp-INI.
 uv run src/dispatcher.py serve --ensemble thinkpad --instance Laptop
 uv run src/dispatcher.py serve --ensemble 3090    --instance Speedy
 
+# Portable Windows/WSL start when runtime paths differ
+uv run src/dispatcher.py serve --ensemble thinkpad --instance Laptop \
+  --bin-dir /path/to/llama.cpp/build/bin \
+  --model-root /path/to/shared/models
+
 # Compile only, do not start
 uv run src/dispatcher.py serve --ensemble thinkpad --instance Laptop --compile-only
 
@@ -700,12 +718,12 @@ curl http://localhost:8001/debug/preview \
 curl http://localhost:8001/v1/models
 
 # Backup instance (Laptop)
-cd instances/Laptop && git add . && git commit -m "Update" && git push
+cd instances/Laptop_WSL && git add . && git commit -m "Update" && git push
 
 # Fresh Install on a new machine (all 3 repos in one go)
 git clone https://github.com/SomeSunlight/Llama_Dispatcher.git
 cd Llama_Dispatcher
-git clone https://github.com/SomeSunlight/Llama_Dispatcher_Laptop.git instances/Laptop
-git clone https://github.com/SomeSunlight/Llama_Dispatcher_Speedy.git instances/Speedy
+git clone https://github.com/SomeSunlight/Llama_Dispatcher_Laptop_WSL.git instances/Laptop_WSL
+git clone https://github.com/SomeSunlight/Llama_Dispatcher_Speedy_Win.git instances/Speedy_Win
 uv sync
 ```
