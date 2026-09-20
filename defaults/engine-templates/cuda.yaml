@@ -1,8 +1,11 @@
 # defaults/engine-templates/cuda.yaml
-# TEMPLATE – Copy to instances/<<namename>/engines/cuda.yaml and adjust bin_dir.
+# TEMPLATE – Copy to instances/<name>/engines/cuda.yaml.
 #
 # NVIDIA CUDA – llama.cpp CUDA build
 # Typical use case: Desktop GPU (RTX 3090, 4090, etc.)
-
-bin_dir: "c:\\llama-cpp\\server\\server_cuda"
-# server_bin: "llama-server.exe"   # Optional – Default is llama-server.exe
+#
+# Machine-local binary paths should normally be supplied by the launcher with
+# Dispatcher --bin-dir. For standalone Dispatcher use, an optional fallback can
+# be declared here:
+# bin_dir: "c:\\llama-cpp\\server\\server_cuda"
+# server_bin: "llama-server.exe"

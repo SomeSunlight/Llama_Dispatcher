@@ -358,14 +358,21 @@ class LlamaOrchestrator:
         return merged
 
     async def get_llama_version(self, binary: Path) -> str:
+        """Return concise version text reported by the effective llama.cpp binary."""
         try:
             proc = await asyncio.create_subprocess_exec(
                 str(binary), "--version", stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
             )
-            stdout, _ = await proc.communicate()
-            text = stdout.decode("utf-8", errors="ignore")
-            match = re.search(r"commit\s+([a-f0-9]+)", text)
-            return match.group(1) if match else (text.strip().splitlines()[0] if text.strip() else "unknown")
+            stdout, stderr = await proc.communicate()
+            text = (stdout + b"\n" + stderr).decode("utf-8", errors="ignore")
+            lines = [line.strip() for line in text.splitlines() if line.strip()]
+            if not lines:
+                return "unknown"
+            first = lines[0]
+            match = re.search(r"commit\s+([a-f0-9]+)", text, re.IGNORECASE)
+            if match and match.group(1).lower() not in first.lower():
+                return f"{first} [commit {match.group(1)}]"
+            return first
         except Exception:
             return "unknown"
 
@@ -730,8 +737,12 @@ class LlamaOrchestrator:
             binary = binary.replace("llama-eval", "llama-perplexity")
         return binary, canonical_params, cli_args
 
-    def _parse_child_args(self, argv: list[str]) -> dict[str, Any]:
-        """Parses llama.cpp-logged child server arguments into canonical long forms."""
+    def _parse_cli_args(self, argv: list[str]) -> dict[str, Any]:
+        """Parse effective llama.cpp argv into canonical long-form parameters.
+
+        The same parser is used for Dispatcher-launched main processes and for
+        router child commands observed in llama.cpp logs.
+        """
         params: dict[str, Any] = {}
         i = 0
         while i < len(argv):
@@ -762,7 +773,7 @@ class LlamaOrchestrator:
         alias = pending["alias"]
         port = pending["port"]
         argv = pending.get("argv", [])
-        effective_args = self._parse_child_args(argv)
+        effective_args = self._parse_cli_args(argv)
         effective_cli = quote_cmd(argv) if argv else None
         declared = state.get("declared_models", {}).get(alias, {})
         runtime_id = self.db.insert_serve_model_instance(
@@ -988,9 +999,11 @@ class LlamaOrchestrator:
         while self.is_running:
             try:
                 binary, compiled_params, cli_args = self.compile_serve_profile(profile_name, overrides)
-                llama_ver = await self.get_llama_version(Path(binary))
+                effective_binary = str(Path(binary).expanduser().resolve())
+                llama_ver = await self.get_llama_version(Path(effective_binary))
 
-                cmd_str = quote_cmd([binary] + cli_args)
+                cmd_str = quote_cmd([effective_binary] + cli_args)
+                startup_params = self._parse_cli_args(cli_args)
                 run_id = str(uuid.uuid4())
                 model_params = compiled_params["models"][profile_name]
 
@@ -1013,8 +1026,9 @@ class LlamaOrchestrator:
                     "serve",
                     profile_name,
                     llama_ver,
+                    effective_binary,
                     cmd_str,
-                    model_params,
+                    startup_params,
                     preset_path=None,
                     preset_content=None,
                     preset_sha256=None,
@@ -1035,7 +1049,7 @@ class LlamaOrchestrator:
 
                 start_time = asyncio.get_event_loop().time()
                 self.current_process = await asyncio.create_subprocess_exec(
-                    binary, *cli_args, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT
+                    effective_binary, *cli_args, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT
                 )
 
                 try:
@@ -1079,9 +1093,11 @@ class LlamaOrchestrator:
         while self.is_running:
             try:
                 binary, compiled_params, cli_args = self.compile_serve_ensemble(ensemble_name, overrides)
-                llama_ver = await self.get_llama_version(Path(binary))
+                effective_binary = str(Path(binary).expanduser().resolve())
+                llama_ver = await self.get_llama_version(Path(effective_binary))
 
-                cmd_str = quote_cmd([binary] + cli_args)
+                cmd_str = quote_cmd([effective_binary] + cli_args)
+                startup_params = self._parse_cli_args(cli_args)
                 run_id = str(uuid.uuid4())
 
                 # Set proxy state
@@ -1114,8 +1130,9 @@ class LlamaOrchestrator:
                     "serve",
                     ensemble_name,
                     llama_ver,
+                    effective_binary,
                     cmd_str,
-                    compiled_params.get("engine", {}),
+                    startup_params,
                     preset_path=compiled_params.get("preset_path"),
                     preset_content=compiled_params.get("preset_content"),
                     preset_sha256=compiled_params.get("preset_sha256"),
@@ -1126,7 +1143,7 @@ class LlamaOrchestrator:
 
                 start_time = asyncio.get_event_loop().time()
                 self.current_process = await asyncio.create_subprocess_exec(
-                    binary, *cli_args, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT
+                    effective_binary, *cli_args, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT
                 )
 
                 try:
@@ -1172,16 +1189,20 @@ class LlamaOrchestrator:
 
     async def run_bench(self, profile_name: str, overrides: dict):
         binary, params, cli_args = self.compile_task_profile(profile_name, "bench", overrides)
-        llama_ver = await self.get_llama_version(Path(binary))
-        cmd_str = quote_cmd([binary] + cli_args)
+        effective_binary = str(Path(binary).expanduser().resolve())
+        llama_ver = await self.get_llama_version(Path(effective_binary))
+        cmd_str = quote_cmd([effective_binary] + cli_args)
+        startup_params = self._parse_cli_args(cli_args)
         run_id = str(uuid.uuid4())
 
-        self.db.insert_run(run_id, "bench", profile_name, llama_ver, cmd_str, params)
+        self.db.insert_run(
+            run_id, "bench", profile_name, llama_ver, effective_binary, cmd_str, startup_params
+        )
         print(f"\n[ORCHESTRATOR] Starting Benchmark | Profile: {profile_name} | Run ID: {run_id}")
         print(f"[ORCHESTRATOR] Command: {cmd_str}\n")
 
         self.current_process = await asyncio.create_subprocess_exec(
-            binary, *cli_args, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT
+            effective_binary, *cli_args, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT
         )
 
         base_ctx = int(params.get("ctx-size", 0))
@@ -1214,18 +1235,22 @@ class LlamaOrchestrator:
     async def run_eval(self, profile_name: str, dataset: str, overrides: dict):
         overrides["f"] = dataset
         binary, params, cli_args = self.compile_task_profile(profile_name, "eval", overrides)
-        llama_ver = await self.get_llama_version(Path(binary))
-        cmd_str = quote_cmd([binary] + cli_args)
+        effective_binary = str(Path(binary).expanduser().resolve())
+        llama_ver = await self.get_llama_version(Path(effective_binary))
+        cmd_str = quote_cmd([effective_binary] + cli_args)
+        startup_params = self._parse_cli_args(cli_args)
         run_id = str(uuid.uuid4())
 
-        self.db.insert_run(run_id, "eval", profile_name, llama_ver, cmd_str, params)
+        self.db.insert_run(
+            run_id, "eval", profile_name, llama_ver, effective_binary, cmd_str, startup_params
+        )
         print(f"\n[ORCHESTRATOR] Starting Evaluation | Profile: {profile_name} | Run ID: {run_id}")
         print(f"[ORCHESTRATOR] Dataset: {dataset}")
         print(f"[ORCHESTRATOR] Command: {cmd_str}\n")
 
         start_time = asyncio.get_event_loop().time()
         self.current_process = await asyncio.create_subprocess_exec(
-            binary, *cli_args, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT
+            effective_binary, *cli_args, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT
         )
 
         final_perplexity, perplexity_error = 0.0, 0.0
