@@ -737,8 +737,12 @@ class LlamaOrchestrator:
             binary = binary.replace("llama-eval", "llama-perplexity")
         return binary, canonical_params, cli_args
 
-    def _parse_child_args(self, argv: list[str]) -> dict[str, Any]:
-        """Parses llama.cpp-logged child server arguments into canonical long forms."""
+    def _parse_cli_args(self, argv: list[str]) -> dict[str, Any]:
+        """Parse effective llama.cpp argv into canonical long-form parameters.
+
+        The same parser is used for Dispatcher-launched main processes and for
+        router child commands observed in llama.cpp logs.
+        """
         params: dict[str, Any] = {}
         i = 0
         while i < len(argv):
@@ -769,7 +773,7 @@ class LlamaOrchestrator:
         alias = pending["alias"]
         port = pending["port"]
         argv = pending.get("argv", [])
-        effective_args = self._parse_child_args(argv)
+        effective_args = self._parse_cli_args(argv)
         effective_cli = quote_cmd(argv) if argv else None
         declared = state.get("declared_models", {}).get(alias, {})
         runtime_id = self.db.insert_serve_model_instance(
@@ -999,7 +1003,7 @@ class LlamaOrchestrator:
                 llama_ver = await self.get_llama_version(Path(effective_binary))
 
                 cmd_str = quote_cmd([effective_binary] + cli_args)
-                startup_params = self._parse_child_args(cli_args)
+                startup_params = self._parse_cli_args(cli_args)
                 run_id = str(uuid.uuid4())
                 model_params = compiled_params["models"][profile_name]
 
@@ -1093,7 +1097,7 @@ class LlamaOrchestrator:
                 llama_ver = await self.get_llama_version(Path(effective_binary))
 
                 cmd_str = quote_cmd([effective_binary] + cli_args)
-                startup_params = self._parse_child_args(cli_args)
+                startup_params = self._parse_cli_args(cli_args)
                 run_id = str(uuid.uuid4())
 
                 # Set proxy state
@@ -1188,7 +1192,7 @@ class LlamaOrchestrator:
         effective_binary = str(Path(binary).expanduser().resolve())
         llama_ver = await self.get_llama_version(Path(effective_binary))
         cmd_str = quote_cmd([effective_binary] + cli_args)
-        startup_params = self._parse_child_args(cli_args)
+        startup_params = self._parse_cli_args(cli_args)
         run_id = str(uuid.uuid4())
 
         self.db.insert_run(
@@ -1234,7 +1238,7 @@ class LlamaOrchestrator:
         effective_binary = str(Path(binary).expanduser().resolve())
         llama_ver = await self.get_llama_version(Path(effective_binary))
         cmd_str = quote_cmd([effective_binary] + cli_args)
-        startup_params = self._parse_child_args(cli_args)
+        startup_params = self._parse_cli_args(cli_args)
         run_id = str(uuid.uuid4())
 
         self.db.insert_run(
