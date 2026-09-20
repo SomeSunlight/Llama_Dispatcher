@@ -50,7 +50,7 @@ Llama_Dispatcher/
 │   ├── Laptop/
 │   │   ├── instance.yaml      # machine_guid, nickname
 │   │   ├── engines/
-│   │   │   └── vulkan.yaml    # bin_dir + GPU flags for this machine
+│   │   │   └── vulkan.yaml    # GPU/backend policy; optional standalone bin_dir fallback
 │   │   ├── ensembles/
 │   │   │   └── thinkpad.yaml
 │   │   ├── profiles/
@@ -148,7 +148,7 @@ description: "Gemma 4 26B QAT, Vulkan build, reduced context"
 
 defaults:
   model: "gemma"    # → defaults/gemma.yaml  (Sampling Defaults)
-  engine: "vulkan"  # → instances/Laptop/engines/vulkan.yaml  (bin_dir, GPU flags)
+  engine: "vulkan"  # → instances/Laptop/engines/vulkan.yaml  (GPU/backend policy)
 
 common:
   m: "${LLAMA_MODEL_ROOT}/gemma-4-26B.gguf"
@@ -508,7 +508,7 @@ Per instance: `instances/<name>/data/metrics.db` (not versioned).
 
 | Table | Content |
 |---|---|
-| `execution_runs` | One entry per server start (Ensemble/Profile, Version, CLI, INI-Hash) |
+| `execution_runs` | Immutable run header with effective llama.cpp binary/version, actual main-process CLI/startup parameters, Ensemble/Profile and INI hash |
 | `serve_model_instances` | One instance per loaded model (declared + effective parameters) |
 | `metrics_serve` | One entry per completed request (Tokens, Speed, TTFT, Sampling-Params) |
 | `metrics_lifecycle` | Load/Evict/Unload events |
@@ -516,14 +516,23 @@ Per instance: `instances/<name>/data/metrics.db` (not versioned).
 | `metrics_eval` | Perplexity results |
 | `proxy_requests` | Proxy log: Endpoint, model, injected params, tokens, latency, TTFT |
 
+### Effective runtime provenance
+
+`execution_runs.llama_binary` records the concrete llama.cpp executable actually launched, and
+`execution_runs.llama_version` is queried from that same executable with `--version`.
+`startup_params` contains the effective main-process arguments, not the merged Engine
+configuration. An Engine `bin_dir` that was overridden by Dispatcher `--bin-dir` therefore
+does not appear as if it produced the measurement. The full effective command remains available
+in `cli_command`.
+
 ### Timestamps
 
 All timestamps are timezone-aware: `YYYY-MM-DD HH:MM:SS+HH:MM` (local time with UTC offset). Sortable, directly readable in DB viewers.
 
 ### Views
 
-- `v_serve_telemetry` – Request timings with runtime context
-- `v_serve_model_instances` – Loaded model instances with effective args
+- `v_serve_telemetry` – Request timings with runtime context plus effective llama.cpp binary/version
+- `v_serve_model_instances` – Loaded model instances with effective args plus run-level llama.cpp provenance
 - `v_router_performance` – Aggregated lifecycle events
 - `v_bench_results` / `v_eval_results` – Measurement results
 
@@ -555,7 +564,7 @@ uv run src/dispatcher.py <mode> [options] [llama.cpp-overrides...]
 | `--api-port PORT` | from Ensemble or `8001` | Port of the Dispatcher-Proxy. Overrides `dispatcher.port` in the ensemble YAML |
 | `--dataset PATH` | `data/wikitext-2-raw.txt` | Text file for `eval` (Perplexity) |
 | `--compile-only` | – | Compiles INI and shows the llama.cpp start command, but starts nothing |
-| `--bin-dir PATH` | Engine/profile `bin_dir` | Process-local llama.cpp binary directory. Explicit CLI value overrides persisted engine/profile paths |
+| `--bin-dir PATH` | optional Engine/profile fallback | Process-local llama.cpp binary directory. Prefer this launcher/runtime-manager value; it overrides any persisted fallback and the effective binary/version are recorded in execution telemetry |
 | `--model-root PATH` | `LLAMA_MODEL_ROOT` environment fallback | Expands `${LLAMA_MODEL_ROOT}` in portable YAML paths. CLI takes precedence over the optional environment fallback |
 
 ### Ad-hoc llama.cpp Overrides
