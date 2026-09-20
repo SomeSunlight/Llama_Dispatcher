@@ -2,7 +2,7 @@
 -- New column machine_id in execution_runs for multi-instance support.
 -- Existing v4 databases are migrated via _upgrade_schema() in database_manager.py.
 PRAGMA foreign_keys = ON;
-PRAGMA user_version = 7;
+PRAGMA user_version = 8;
 
 CREATE TABLE IF NOT EXISTS execution_runs (
     run_id TEXT PRIMARY KEY,
@@ -11,6 +11,7 @@ CREATE TABLE IF NOT EXISTS execution_runs (
     tool_mode TEXT NOT NULL,             -- 'serve', 'bench', 'eval'
     ensemble_name TEXT NOT NULL,         -- ensemble (serve) or profile name (bench/eval)
     llama_version TEXT,
+    llama_binary TEXT,                   -- effective binary path actually executed
     cli_command TEXT NOT NULL,           -- main process invocation, reconstructed as-is
     startup_params TEXT NOT NULL,        -- canonicalized startup parameters of the main process
     preset_path TEXT,                    -- router preset, if --models-preset was used
@@ -199,6 +200,8 @@ SELECT
     json_extract(i.effective_args, '$."n-gpu-layers"') AS n_gpu_layers,
     json_extract(i.effective_args, '$."cache-type-k"') AS cache_type_k,
     json_extract(i.effective_args, '$."cache-type-v"') AS cache_type_v,
+    r.llama_version,
+    r.llama_binary,
     r.startup_params AS startup_params,
     json_extract(i.effective_args, '$."ctx-size"') AS runtime_ctx_size,
     m.p_tokens AS prompt_tokens,
@@ -270,6 +273,8 @@ SELECT
     r.machine_id,
     r.timestamp,
     r.ensemble_name AS profile,
+    r.llama_version,
+    r.llama_binary,
     b.test_type,
     b.ctx_size AS test_ctx,
     json_extract(r.startup_params, '$.threads') AS threads,
@@ -287,6 +292,8 @@ SELECT
     r.machine_id,
     r.timestamp,
     r.ensemble_name AS profile,
+    r.llama_version,
+    r.llama_binary,
     json_extract(r.startup_params, '$."ctx-size"') AS ctx_size,
     json_extract(r.startup_params, '$."cache-type-k"') AS quant_k,
     e.dataset,
