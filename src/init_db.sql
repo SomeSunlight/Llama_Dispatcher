@@ -1,4 +1,4 @@
--- Llama Dispatcher metrics schema v5
+-- Llama Dispatcher metrics schema v8
 -- New column machine_id in execution_runs for multi-instance support.
 -- Existing v4 databases are migrated via _upgrade_schema() in database_manager.py.
 PRAGMA foreign_keys = ON;
@@ -230,6 +230,8 @@ CREATE VIEW v_serve_model_instances AS
 SELECT
     i.id,
     r.machine_id,
+    r.llama_version,
+    r.llama_binary,
     i.loaded_at,
     i.unloaded_at,
     r.ensemble_name,
