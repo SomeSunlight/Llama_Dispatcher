@@ -12,12 +12,13 @@ The templates are fallbacks/examples. Instance-specific engines normally live un
    cp defaults/engine-templates/vulkan.yaml instances/Laptop/engines/vulkan-intel.yaml
    ```
 
-2. Keep a standalone `bin_dir` fallback when useful. A launcher/runtime manager may override it explicitly with Dispatcher `--bin-dir PATH`, so Windows and WSL do not need duplicate profiles merely because the compiled llama.cpp directory differs.
+2. Prefer **no active `bin_dir` in the engine** when a launcher/runtime manager always supplies Dispatcher `--bin-dir PATH`. Keep `bin_dir` only as an optional standalone fallback. This avoids stale Windows/WSL paths being mistaken for the runtime that actually produced a measurement.
 
 3. Put backend/hardware environment in the engine instead of requiring the operator to remember shell exports:
 
    ```yaml
-   bin_dir: "c:\\llama.cpp\\server\\server_vulkan"
+   # Optional standalone fallback only:
+   # bin_dir: "c:\\llama.cpp\\server\\server_vulkan"
 
    environment:
      GGML_VK_VISIBLE_DEVICES: "0"
@@ -53,6 +54,7 @@ The Dispatcher searches engine configuration in this order:
 
 - model defaults: model/sampling behavior that is hardware-agnostic;
 - engine: backend flags, device policy, optional standalone `bin_dir`, and required child-process environment;
-- launcher/runtime manager: concrete machine-local binary/model roots supplied explicitly at process start.
+- launcher/runtime manager: concrete machine-local binary/model roots supplied explicitly at process start;
+- execution telemetry: observed effective binary path/version and actual process arguments, never an overridden engine fallback.
 
 `environment:` is Dispatcher policy and is never forwarded to llama.cpp as a CLI argument. Invalid environment names or non-scalar values fail clearly.
