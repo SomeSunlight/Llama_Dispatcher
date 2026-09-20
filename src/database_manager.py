@@ -58,8 +58,16 @@ class MetricsDatabase:
                 )
                 print("[DB] Schema upgrade v4→v5: added execution_runs.machine_id.")
 
+            # v7 → v8: explicit effective llama.cpp binary provenance.
+            # Historical rows remain NULL because cli_command may not be safely reversible.
+            cols = [row[1] for row in conn.execute("PRAGMA table_info(execution_runs)")]
+            if "llama_binary" not in cols:
+                conn.execute("ALTER TABLE execution_runs ADD COLUMN llama_binary TEXT")
+                print("[DB] Schema upgrade v7→v8: added execution_runs.llama_binary.")
+
             tables = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
             if "metrics_proxy_requests" not in tables:
+                conn.execute("PRAGMA user_version = 8")
                 return
 
             pcols = {row[1] for row in conn.execute("PRAGMA table_info(metrics_proxy_requests)")}
@@ -124,7 +132,7 @@ class MetricsDatabase:
                 "CREATE INDEX IF NOT EXISTS idx_proxy_requests_run "
                 "ON metrics_proxy_requests(run_id)"
             )
-            conn.execute("PRAGMA user_version = 7")
+            conn.execute("PRAGMA user_version = 8")
             if added:
                 print("[DB] Schema upgrade to v7: added proxy request logging columns: " + ", ".join(added))
 
@@ -138,6 +146,7 @@ class MetricsDatabase:
         mode: str,
         ensemble: str,
         version: str,
+        binary: str,
         cmd: str,
         params: dict,
         preset_path: str | None = None,
@@ -149,10 +158,10 @@ class MetricsDatabase:
             conn.execute(
                 """
                 INSERT INTO execution_runs (
-                    run_id, machine_id, timestamp, tool_mode, ensemble_name, llama_version, cli_command,
-                    startup_params, preset_path, preset_content, preset_sha256
+                    run_id, machine_id, timestamp, tool_mode, ensemble_name, llama_version, llama_binary,
+                    cli_command, startup_params, preset_path, preset_content, preset_sha256
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     run_id,
@@ -161,6 +170,7 @@ class MetricsDatabase:
                     mode,
                     ensemble,
                     version,
+                    binary,
                     cmd,
                     self._json(params),
                     preset_path,
