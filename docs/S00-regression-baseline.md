@@ -71,57 +71,91 @@ the Python entry points; it does not replace local Windows/WSL acceptance.
    additive migrations. This document does not edit generated context or
    reinterpret historical data.
 
-## Owner smoke test — Speedy_Win and Laptop_WSL
+## Automated owner smoke — three installations
 
-Test on each machine using its **existing working** llama.cpp Dispatcher
-launch configuration. No model download, Strata restart, direct Caddy change,
-engine switch or instance migration. The probes below assume the Dispatcher
-proxy is already running, not the internal llama.cpp server.
+There are **two independent levels**:
 
-- [ ] Checkout the PR branch in the **core** repository only. Run the full
-  unittest command above and record pass/fail and OS. Do not modify the four
-  independent instance repositories.
-- [ ] Compare existing runtime invocation (--instance, ensemble/profile,
-  --bin-dir, --model-root as applicable). Do not post machine-private paths,
-  keys, or Authorization headers to GitHub.
-- [ ] GET /v1/models from the existing Dispatcher proxy port: verify real and
-  proxy-only aliases, without exposing internal model paths.
-- [ ] POST /debug/preview with a synthetic prompt and one alias observed
-  in /v1/models. Verify original_model, forwarded_model, injected_params,
-  overridden_by_client and forwarded_body. No inference is executed.
-- [ ] Optional, only if inference is already safe: send one tiny synthetic
-  chat request to the running Dispatcher proxy, then inspect the newest
-  row in v_proxy_request_summary using a DB viewer or a DB copy. Do not
-  restart the process or run expensive benchmarks.
-- [ ] Report machine, unittest result, inspected alias, and discrepancies in
-  PR/#19. Give explicit acceptance (or requested changes); no merge before it.
+1. The deterministic unittest regression suite runs in GitHub Actions on
+   each PR (mock backends, no live model or OS-specific machine).
+2. The **local live smoke** uses the HTTP interface of an **already running**
+   Dispatcher. It cannot be executed in GitHub Actions because the private
+   Speedy/Laptop machines are not connected to GitHub runners.
 
-PowerShell example (replace port and model alias):
+**Owner runs one command per installation** from the S00 branch in the core
+repository. The script first executes the entire unittest suite, then checks
+/v1/models, /debug/config, and /debug/preview for **every advertised
+alias**. It compares model routing, sampling overrides, whole-object
+chat_template_kwargs replacement, unmanaged-field pass-through and preview
+output against the live Dispatcher configuration. No real model inference is
+executed in the default mode. If --instance is supplied and its
+instances/NAME/data/metrics.db exists, it checks schema v8 **read-only**
+(without migrations, database copies or content disclosure). If the DB is in
+another directory, this optional database check is reported as SKIP.
 
-~~~powershell
-$base = "http://127.0.0.1:8001"
-Invoke-RestMethod "$base/v1/models"
-$body = @{model="YOUR_ALIAS"; messages=@(@{role="user";content="S00 test"}); temperature=0.9} | ConvertTo-Json -Depth 6
-Invoke-RestMethod "$base/debug/preview" -Method Post -ContentType "application/json" -Body $body
+### One command on each machine
+
+After checking out this PR branch and with the existing llama.cpp Dispatcher
+**already running**, execute from the core repository root:
+
+| Machine | Required? | Command |
+|---|---|---|
+| Speedy / Windows | Yes | uv run --frozen python scripts/s00_verify.py --instance Speedy_Win |
+| Laptop / WSL | Yes | uv run --frozen python scripts/s00_verify.py --instance Laptop_WSL |
+| Laptop / Windows | Recommended if still working | uv run --frozen python scripts/s00_verify.py --instance Laptop_Win |
+
+uv run --frozen uses the repository's lockfile and project environment;
+there is no separate manual HTTP/SQL procedure. Each run ends with
+[S00] PASS or [S00] FAIL and a readable list of automated checks.
+The sanitized report is generated at reports/s00-NAME.json (Git-ignored).
+It records only test status, platform, alias counts and basic observed API/schema
+metadata. It does **not** record prompts, model responses, authorization
+headers, keys, machine-private database contents or complete request bodies.
+Reports can be inspected before sharing.
+
+If the running Dispatcher uses a non-default proxy port, append
+--base-url http://127.0.0.1:YOUR_PROXY_PORT. The URL must address the
+**Dispatcher proxy**, not the internal llama.cpp server or the Strata/Caddy
+route. The runner deliberately accepts loopback HTTP only and never uses
+/switch or /stop. It does **not** discover or start a process.
+
+If Laptop / Windows has already been retired, you can still run the isolated
+regression suite without a live server:
+
+~~~shell
+uv run --frozen python scripts/s00_verify.py --instance Laptop_Win --unit-only
 ~~~
 
-WSL example (replace port and model alias):
+A live failure because the server is absent/starting is **not** automatically
+an engine regression. The report shows the failing check; verify port and
+current process, then repeat the **same** command.
 
-~~~bash
-base=http://127.0.0.1:8001
-curl -fsS "$base/v1/models"
-curl -fsS "$base/debug/preview" -H 'Content-Type: application/json' \
-  -d '{"model":"YOUR_ALIAS","messages":[{"role":"user","content":"S00 test"}],"temperature":0.9}'
-~~~
+### Optional real end-to-end inference
 
-Read-only SQL inspection **on a DB copy** (do not commit DB/WAL/SHM):
+When an already running llama.cpp model is **safe to use** on that machine,
+append --inference to the same command. The runner then also sends one
+non-streaming and one streaming synthetic, **3-token** chat request through
+the Dispatcher proxy. It validates response structure/SSE frames and records
+only counts and success, not response text or prompts. This may **load a large
+model** and consume GPU/RAM; it is opt-in and not required to exercise all
+mocked streaming/cancellation/error cases (those run in the unit suite).
+Default inference timeout is 300 seconds; adjust with
+--inference-timeout 600 if genuinely needed. Inference can create normal
+proxy telemetry rows in the running instance, as any client request does.
+It never restarts, stops, downloads, switches or calibrates the backend.
 
-~~~sql
-SELECT machine_id, timestamp, client_model, target_model,
-       changed_parameter_count, status_code
-FROM v_proxy_request_summary
-ORDER BY timestamp DESC LIMIT 5;
-~~~
+### Acceptance protocol
+
+- [ ] **Speedy_Win:** automated default run PASS, optional inference outcome.
+- [ ] **Laptop_WSL:** automated default run PASS, optional inference outcome.
+- [ ] **Laptop_Win:** run if still active; otherwise mark not applicable (or
+  unit-only). Do not bring up a retired model merely for S00.
+- [ ] Owner reviews reported deviations / current known limitations, then
+  gives **explicit S00 approval** before merge. The PR stays Draft until then.
+
+CI and local smoke prove different things: unit tests isolate corner cases
+(including the fragmented-SSE and HTTP-status limitations), whereas live smoke
+verifies the currently running service's public contract. Neither proves a
+future Strata adapter, and no S01 engine refactoring is performed here.
 
 ## S01 adapter-boundary proposal (design only, not implementation)
 
