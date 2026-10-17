@@ -130,6 +130,7 @@ class SmokeRunnerTests(unittest.TestCase):
                  patch.object(smoke, "http_json",
                               side_effect=lambda base, method, route, payload, timeout:
                               send(method, route, payload)), \
+                 patch.object(smoke, "pin_startup", return_value={"status": "PASS", "capture": "mock_observed"}), \
                  patch.object(smoke, "infer", side_effect=AssertionError("unexpected inference")):
                 exit_code = smoke.main(["--label", "Speedy_Win",
                                          "--report", str(report)])
@@ -137,6 +138,7 @@ class SmokeRunnerTests(unittest.TestCase):
             data = json.loads(report.read_text(encoding="utf-8"))
             self.assertEqual(data["checks"]["live_preview"]["status"], "PASS")
             self.assertEqual(data["checks"]["inference"]["status"], "SKIP")
+            self.assertEqual(data["checks"]["startup_provenance"]["status"], "PASS")
             self.assertEqual(data["checks"]["live_preview"]["previews_checked"], 2)
             self.assertEqual(len(calls), 4)
             self.assertNotIn(smoke.PROBE_PROMPT, report.read_text(encoding="utf-8"))
