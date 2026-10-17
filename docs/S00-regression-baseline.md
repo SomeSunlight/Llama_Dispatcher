@@ -11,6 +11,97 @@ acceptance. **Do not merge or start S01 without approval.**
   operating reference, and actual source at the baseline commit. PLAN.md
   remains unchecked until approved and merged.
 
+## IMPORTANT — before a live test, Dispatcher must already be running
+
+**The S00 live test does not launch the Dispatcher.** It connects from a
+**second terminal** to the proxy of an **already running llama.cpp Dispatcher**
+on the same Windows/WSL environment. It never starts, switches, restarts,
+downloads, stops or reconfigures a model. For a useful regression baseline,
+**launch the Dispatcher exactly as it is normally used when it works**:
+preserve the instance, ensemble/profile, binary/model roots, CLI overrides
+and local engine configuration. Do not introduce a special test startup.
+
+The first test on the renamed Windows instance is also a **migration sanity
+check**. In particular, the Dispatcher may create a missing instance
+directory instead of failing. **Check the instance repository and YAML before
+launch**; do not allow a fresh empty folder to masquerade as a successful
+Speedy_Win runtime.
+
+### Known Speedy / Windows startup (owner-provided, NOT yet locally verified)
+
+Run from the **Llama_Dispatcher core repository root** (not an independent
+instance Git working directory). Before starting, check in PowerShell:
+
+~~~powershell
+Test-Path .\instances\Speedy_Win\instance.yaml
+Test-Path .\instances\Speedy_Win\ensembles\3090.yaml
+~~~
+
+Both commands must return True. The independent repository
+https://github.com/SomeSunlight/Llama_Dispatcher_Speedy_Win belongs under
+instances/Speedy_Win. Then start **as supplied by the owner**:
+
+~~~powershell
+uv run src/dispatcher.py serve --ensemble 3090 --instance Speedy_Win --model-root c:\AI_Models\LLM\GGUF_Raw
+~~~
+
+Every supplied argument matters. In particular, do **not** silently change
+--ensemble, --instance or --model-root, and do not add --bin-dir just because
+an example in the instance README shows it: the actual installed engine
+configuration already provides a bin_dir fallback. The renamed Speedy_Win
+setup has **not yet been demonstrated to work**; record first-start problems
+as first-start/configuration issues, rather than counting them as proven S00
+runtime regressions.
+
+On Laptop / WSL and Laptop / Windows, likewise use the **existing known-good
+launch command** for that instance. No startup command has yet been confirmed
+for those two environments. Do not copy Windows paths into WSL or share a
+machine identity across them.
+
+**Only after the Dispatcher reports a successful startup** should you open
+another terminal in the same environment, check out PR #20 in the core
+repository, and run the S00 smoke command below. Default proxy URL is
+http://127.0.0.1:8001 (not the internal llama.cpp port 8081 or Strata).
+
+### Capturing a replayable start/configuration baseline
+
+The live runner now tries to read the **actual running Python Dispatcher
+process command line** on Windows (Win32 process metadata) and WSL/Linux
+(/proc). It verifies the requested --instance, records the **entire observed
+process argv**, including all CLI overrides and paths, and fingerprints the
+local instance YAML files and the Git revisions of core + instance. An OS
+process command line is evidence of how that Python process was invoked,
+but can differ from the original shell's uv run wrapper; it does not
+independently prove which process owns the selected HTTP port.
+
+On the **first successful run**, the runner saves the full command and
+configuration fingerprint to reports/s00-INSTANCE.baseline.json, a
+**Git-ignored, machine-private** manifest. On subsequent runs it compares
+the observed command and configuration against this pinned baseline and
+fails on drift. This helps ensure the future test is performed with the
+same launch/configuration rather than merely receiving HTTP 200.
+A changed Git checkout, configuration, Python path or CLI option is
+meaningful and requires review.
+
+If local process inspection is blocked, you can explicitly supply
+--launch-command "FULL COMMAND HERE" to record the operator-declared
+invocation instead. The report says user_declared_unverified: **this is not
+proof of how the running process was started**. Inspect the manifest before
+sharing it; it contains local paths and could include sensitive CLI flags.
+The general PASS/FAIL report contains only the command hash, source and
+non-secret summary, not the full argv. No manifests are committed or sent
+to GitHub automatically.
+
+To **intentionally** establish a new baseline after a verified change,
+pass --rebaseline. The previous manifest is archived locally under a
+timestamped name; the new launch/configuration is then pinned. Never
+rebaseline simply to hide an unexplained difference. These manifests capture
+the configuration files **at test time**; S00 cannot prove that files were
+not edited after the server initially started.
+
+The isolated unit tests and GitHub Actions do **not** need a running
+Dispatcher. The live smoke is the second, machine-specific stage.
+
 ## Run deterministic regression tests
 
 No GPU, GGUF model, Strata, Caddy, network access, secrets, or real instance
@@ -94,8 +185,9 @@ another directory, this optional database check is reported as SKIP.
 
 ### One command on each machine
 
-After checking out this PR branch and with the existing llama.cpp Dispatcher
-**already running**, execute from the core repository root:
+After the existing llama.cpp Dispatcher has started successfully in **one
+terminal**, execute from a **second terminal** in the core repository root,
+with PR #20 checked out:
 
 | Machine | Required? | Command |
 |---|---|---|
@@ -107,11 +199,15 @@ uv run --frozen uses the repository's lockfile and project environment;
 there is no separate manual HTTP/SQL procedure. Each run ends with
 [S00] PASS or [S00] FAIL and a readable list of automated checks.
 The sanitized report is generated at reports/s00-NAME.json (Git-ignored).
-It records only test status, platform, alias counts and basic observed API/schema
-metadata. It does **not** record prompts, model responses, authorization
-headers, keys, machine-private database contents or complete request bodies.
-Reports can be inspected before sharing.
+It records test status, platform, alias counts, non-secret command SHA256,
+configuration fingerprints and git commit IDs. The **separate local startup
+baseline** stores the full observed launch command and should **not be shared
+without review**. The general JSON report does **not** record prompts,
+model responses, authorization headers, keys, private database contents or
+complete request bodies. Reports can be inspected before sharing.
 
+A normal live run **requires** --instance: this is also used to identify
+and pin the actual running startup; it does not start that instance.
 If the running Dispatcher uses a non-default proxy port, append
 --base-url http://127.0.0.1:YOUR_PROXY_PORT. The URL must address the
 **Dispatcher proxy**, not the internal llama.cpp server or the Strata/Caddy
@@ -145,10 +241,14 @@ It never restarts, stops, downloads, switches or calibrates the backend.
 
 ### Acceptance protocol
 
-- [ ] **Speedy_Win:** automated default run PASS, optional inference outcome.
-- [ ] **Laptop_WSL:** automated default run PASS, optional inference outcome.
-- [ ] **Laptop_Win:** run if still active; otherwise mark not applicable (or
-  unit-only). Do not bring up a retired model merely for S00.
+- [ ] **Speedy_Win:** instance/ensemble directory verified, **renamed-instance
+  first startup demonstrated**, normal startup command pinned, automated
+  default run PASS, optional inference outcome.
+- [ ] **Laptop_WSL:** known-good startup command pinned, automated default
+  run PASS, optional inference outcome.
+- [ ] **Laptop_Win:** known-good startup pinned if still active; otherwise
+  mark not applicable (or unit-only). Do not bring up a retired model merely
+  for S00.
 - [ ] Owner reviews reported deviations / current known limitations, then
   gives **explicit S00 approval** before merge. The PR stays Draft until then.
 
