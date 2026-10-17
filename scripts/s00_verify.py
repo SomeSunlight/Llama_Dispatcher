@@ -18,6 +18,8 @@ from pathlib import Path
 from urllib import error, request
 from urllib.parse import urlsplit
 
+from s00_provenance import ProvenanceError, pin_startup, rebaseline_startup
+
 ROOT = Path(__file__).resolve().parents[1]
 PROBE_PROMPT = "S00 synthetic test"
 PROBE_TEMPERATURE = 0.913
@@ -228,7 +230,9 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="S00: unit tests + live local Dispatcher smoke")
     parser.add_argument("--base-url", default="http://127.0.0.1:8001",
                         help="Already running local Dispatcher proxy (not direct llama.cpp/Strata)")
-    parser.add_argument("--instance", help="Optional local instance folder name for read-only DB schema check")
+    parser.add_argument("--instance", help="Required for live run: instance name; also checks local DB read-only")
+    parser.add_argument("--launch-command", help="Only if OS process inspection fails: record an operator-declared exact serve command (not OS-verified)")
+    parser.add_argument("--rebaseline", action="store_true", help="Explicitly archive previous start/config baseline and accept the current observed one")
     parser.add_argument("--label", default=None, help="Label in result (e.g. Speedy_Win)")
     parser.add_argument("--report", type=Path, help="Optional JSON report path")
     parser.add_argument("--unit-only", action="store_true", help="Skip live probes if server retired")
@@ -237,7 +241,6 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--inference-timeout", type=float, default=300)
     parser.add_argument("--http-timeout", type=float, default=8)
     args = parser.parse_args(argv)
-    require_or_die = None
     safe_label = re.sub(r"[^A-Za-z0-9_-]", "_",
                         args.label or args.instance or ("Windows" if sys.platform == "win32" else "WSL_or_Linux"))
     report_path = args.report or ROOT / "reports" / f"s00-{safe_label}.json"
@@ -250,8 +253,10 @@ def main(argv: list[str] | None = None) -> int:
         "overall": "FAIL",
     }
     try:
-        if args.unit_only and args.inference:
-            raise SmokeFailure("--unit-only and --inference cannot be combined.")
+        if args.unit_only and (args.inference or args.rebaseline or args.launch_command):
+            raise SmokeFailure("--unit-only cannot combine with --inference, --rebaseline or --launch-command.")
+        if not args.unit_only:
+            require(bool(args.instance), "Live S00 requires --instance NAME to capture and verify startup provenance.")
         if args.http_timeout <= 0 or args.inference_timeout <= 0:
             raise SmokeFailure("Timeouts must be positive.")
         base_url = validate_base_url(args.base_url) if not args.unit_only else None
@@ -265,6 +270,13 @@ def main(argv: list[str] | None = None) -> int:
                 return http_json(base_url, method, route, payload, args.http_timeout)
             inspection, selected_model = inspect_live(send)
             result["checks"]["live_preview"] = {"status": "PASS", **inspection}
+            print("[S00] Capturing running process command and checking pinned launch baseline...")
+            try:
+                provenance = (rebaseline_startup if args.rebaseline else pin_startup)(
+                    args.instance, report_path.parent, args.launch_command)
+            except ProvenanceError as exc:
+                raise SmokeFailure(str(exc)) from None
+            result["checks"]["startup_provenance"] = provenance
             if args.instance:
                 db = ROOT / "instances" / args.instance / "data" / "metrics.db"
                 metadata = read_db_metadata(db)
