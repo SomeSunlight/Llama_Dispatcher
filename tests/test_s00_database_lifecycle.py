@@ -1,5 +1,6 @@
 """S00: SQLite schema/provenance and stubbed llama.cpp lifecycle contracts."""
 import asyncio
+import io
 import json
 import re
 import sqlite3
@@ -8,6 +9,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from contextlib import redirect_stdout
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock, patch
 
@@ -115,8 +117,11 @@ class DatabaseCharacterization(unittest.TestCase):
                     (id,model_requested,endpoint,stream,req_temperature,req_enable_thinking)
                     VALUES (1,'base','chat/completions',0,0.2,0);
             """)
-        MetricsDatabase(self.path, SCHEMA, machine_id="later")
-        MetricsDatabase(self.path, SCHEMA, machine_id="later")  # idempotent
+        # Characterize migration behavior, not the encoding of its diagnostic
+        # prints. A Windows cp1252 console cannot encode the existing → symbol.
+        with redirect_stdout(io.StringIO()):
+            MetricsDatabase(self.path, SCHEMA, machine_id="later")
+            MetricsDatabase(self.path, SCHEMA, machine_id="later")  # idempotent
         with closing(sqlite3.connect(self.path)) as con, con:
             run = con.execute(
                 "SELECT machine_id,llama_binary FROM execution_runs WHERE run_id='old-1'"
