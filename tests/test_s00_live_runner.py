@@ -1,6 +1,7 @@
 """No external HTTP or inference: characterize S00's one-command smoke runner."""
 import json
 import sqlite3
+from contextlib import closing
 import sys
 import tempfile
 import unittest
@@ -94,7 +95,7 @@ class SmokeRunnerTests(unittest.TestCase):
     def test_readonly_database_probe_does_not_migrate(self):
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "metrics.db"
-            with sqlite3.connect(path) as conn:
+            with closing(sqlite3.connect(path)) as conn, conn:
                 conn.executescript("""
                     PRAGMA user_version = 8;
                     CREATE TABLE metrics_proxy_requests (id INTEGER);
@@ -105,7 +106,7 @@ class SmokeRunnerTests(unittest.TestCase):
                 """)
                 conn.execute("INSERT INTO metrics_proxy_requests VALUES (11)")
             self.assertEqual(smoke.read_db_metadata(path)["schema_version"], 8)
-            with sqlite3.connect(path) as conn:
+            with closing(sqlite3.connect(path)) as conn, conn:
                 self.assertEqual(conn.execute(
                     "SELECT COUNT(*) FROM metrics_proxy_requests").fetchone()[0], 1)
 
