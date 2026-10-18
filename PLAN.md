@@ -24,7 +24,7 @@ Llama Dispatcher is currently a llama.cpp-specific orchestrator/proxy. Speedy_Wi
 **Unchecked means not implemented or owner-approved**, NOT a request to start all items.
 
 - [ ] **S00 — #19:** Characterization tests and owner-verified baseline for today's llama.cpp contract. First task; no production behavior changes.
-**S00 in review, not accepted:** Draft [PR #20](https://github.com/SomeSunlight/Llama_Dispatcher/pull/20) characterizes baseline main commit `f0fa2e5b2d281f205b64da136ac5d810b396697a` (2026-10-16). Automated Ubuntu checks passed; owner smoke tests on Speedy_Win and Laptop_WSL and explicit approval are pending. No subsequent gate is authorized.
+**S00 in review, not accepted:** Draft [PR #20](https://github.com/SomeSunlight/Llama_Dispatcher/pull/20) characterizes baseline main commit `f0fa2e5b2d281f205b64da136ac5d810b396697a` (2026-10-16). Automated Ubuntu + Windows CI checks passed; Speedy_Win's first local unit run identified Windows-only SQLite test-fixture locks, now fixed in PR #20. Full live smoke on Speedy_Win and Laptop_WSL and explicit owner approval are still pending. No subsequent gate is authorized.
 
 - [ ] **S01 — #9:** Engine interface and first LlamaCppBackend extraction. Requires S00 approval.
 - [ ] **S02 — #10:** Independent client credentials/identities and explicit `default/enforce/passthrough` request policy. Requires S01. **Before Strata traffic is routed through Dispatcher.**
