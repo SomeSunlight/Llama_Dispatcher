@@ -14,6 +14,7 @@ from unittest.mock import AsyncMock, Mock, patch
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 import dispatcher_core as core  # noqa: E402
+import gc
 from database_manager import MetricsDatabase  # noqa: E402
 
 SCHEMA = ROOT / "src" / "init_db.sql"
@@ -23,6 +24,8 @@ class DatabaseCharacterization(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
+        # Run GC first: production sqlite3 with-blocks commit but do not close.
+        self.addCleanup(gc.collect)
         self.path = Path(self.temp.name) / "metrics.db"
 
     def test_fresh_schema_views_and_forwarded_not_observed_parameters(self):
