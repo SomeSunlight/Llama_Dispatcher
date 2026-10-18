@@ -12,6 +12,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 
 import s00_verify as smoke  # noqa: E402
+from _sqlite_test_support import sqlite_temp_directory  # noqa: E402
 
 
 class SmokeRunnerTests(unittest.TestCase):
@@ -93,7 +94,7 @@ class SmokeRunnerTests(unittest.TestCase):
                     smoke.validate_base_url(address)
 
     def test_readonly_database_probe_does_not_migrate(self):
-        with tempfile.TemporaryDirectory() as tmp:
+        with sqlite_temp_directory() as tmp:
             path = Path(tmp) / "metrics.db"
             with closing(sqlite3.connect(path)) as conn, conn:
                 conn.executescript("""
