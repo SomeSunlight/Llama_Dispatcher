@@ -283,7 +283,8 @@ def main(argv: list[str] | None = None) -> int:
             print("[S00] Capturing running process command and checking pinned launch baseline...")
             try:
                 provenance = (rebaseline_startup if args.rebaseline else pin_startup)(
-                    args.instance, report_path.parent, args.launch_command)
+                    args.instance, report_path.parent, args.launch_command,
+                    proxy_port=urlsplit(base_url).port)
             except ProvenanceError as exc:
                 raise SmokeFailure(str(exc)) from None
             result["checks"]["startup_provenance"] = provenance
