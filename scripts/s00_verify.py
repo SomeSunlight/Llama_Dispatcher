@@ -274,9 +274,12 @@ def main(argv: list[str] | None = None) -> int:
         if not args.unit_only:
             print(f"[S00] Checking existing local Dispatcher at {base_url}...")
             def send(method: str, route: str, payload: dict | None) -> dict:
+                print(f"[S00] HTTP {method} {route} (Dispatcher proxy)")
                 return http_json(base_url, method, route, payload, args.http_timeout)
             inspection, selected_model = inspect_live(send)
             result["checks"]["live_preview"] = {"status": "PASS", **inspection}
+            print(f"[S00] Verified {inspection['previews_checked']} live alias previews; "
+                  "no model inference in this stage.")
             print("[S00] Capturing running process command and checking pinned launch baseline...")
             try:
                 provenance = (rebaseline_startup if args.rebaseline else pin_startup)(
