@@ -11,13 +11,14 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
+from _sqlite_test_support import sqlite_temp_directory  # noqa: E402
 from database_manager import MetricsDatabase  # noqa: E402
 from dispatcher_core import LlamaOrchestrator  # noqa: E402
 
 
 class RuntimeProvenanceTests(unittest.TestCase):
     def test_execution_run_records_effective_binary_version_and_args(self):
-        with tempfile.TemporaryDirectory() as tmp:
+        with sqlite_temp_directory() as tmp:
             db_path = Path(tmp) / "metrics.db"
             db = MetricsDatabase(
                 db_path=db_path,
