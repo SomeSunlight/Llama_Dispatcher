@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import platform
 import re
 import sqlite3
@@ -215,9 +216,15 @@ def infer(base_url: str, model: str, timeout: float) -> dict:
 
 
 def run_unit_tests() -> tuple[bool, str]:
+    # Child stdout is piped, not a terminal. On Windows it otherwise defaults
+    # to cp1252, which cannot print existing migration diagnostics (e.g. →).
+    # Decode with the matching encoding regardless of the parent console.
+    child_env = os.environ.copy()
+    child_env["PYTHONIOENCODING"] = "utf-8"
     proc = subprocess.run(
         [sys.executable, "-m", "unittest", "discover", "-s", "tests", "-v"],
-        cwd=ROOT, capture_output=True, text=True, check=False,
+        cwd=ROOT, capture_output=True, text=True, encoding="utf-8",
+        errors="replace", env=child_env, check=False,
     )
     output = proc.stdout + "\n" + proc.stderr
     match = re.search(r"Ran (\d+) tests?", output)
