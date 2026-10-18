@@ -102,67 +102,30 @@ not edited after the server initially started.
 The isolated unit tests and GitHub Actions do **not** need a running
 Dispatcher. The live smoke is the second, machine-specific stage.
 
-## Run deterministic regression tests
-
-No GPU, GGUF model, Strata, Caddy, network access, secrets, or real instance
-repository is required. Synthetic configuration directories, an in-memory
-HTTP fake and temporary SQLite databases are used. Existing tests still run.
-
-At the Dispatcher repository root (Windows PowerShell or WSL):
-
-~~~shell
-uv sync --frozen
-uv run --frozen python -m unittest discover -s tests -v
-~~~
-
-To run only S00 tests:
-
-~~~shell
-uv run --frozen python -m unittest discover -s tests -p "test_s00*.py" -v
-~~~
-
-The existing GitHub PR workflow runs the complete suite on Ubuntu and checks
-the Python entry points; it does not replace local Windows/WSL acceptance.
-
-## Observed llama.cpp contract
-
-| Boundary | Behavior characterized |
-|---|---|
-| Configuration | Deep merge model defaults → instance engine defaults → profile; ensemble entry overrides; CLI ad-hoc override has highest priority. |
-| Paths | Instance engine settings beat fallback templates; launcher --bin-dir beats engine bin_dir; --model-root expands the model placeholder (environment is fallback). Executable suffix depends on OS. |
-| Compile-only | Ensemble generates real-model INI sections, router CLI --models-preset and INI hash; proxy-only aliases do not add model sections. Single profile compiles direct CLI args, without router INI. |
-| Public API | /v1/models exposes real plus proxy-only aliases. /debug/preview simulates without forwarding. |
-| Policy | For configured alias, sampling and chat_template_kwargs replace client values; chat_template_kwargs is one whole object, not a recursive merge. Unmanaged fields pass through. |
-| Telemetry | Client intent, resolved profile, target alias, forwarded control snapshot and diff remain distinct. Message/prompt/input content is excluded from the parameter snapshots. Forwarded != engine-observed. |
-| SQLite | PRAGMA user_version=8; table metrics_proxy_requests; view v_proxy_request_summary and runtime performance views. Execution runs record effective binary/version/CLI; loaded models get separate runtime IDs. |
-| Migration | Certain historical req_* fields were already effective values and may be copied to effective_*; unknown historical client aliases, client snapshots, policy origins and unrecoverable binary paths remain NULL. |
-| Lifecycle | Child logs can supply spawned alias/port/effective args. Single-profile mode records one model instance. /stop terminates an active managed child and waits. Reader cancellation propagates. |
-| Crash | An unexpectedly ended single-profile process within 45 seconds uses fatal process exit; ensemble threshold is 15 seconds. Tests stub process exit. |
-
-### Known limitations / bugs (document only in S00)
-
-1. **Fragmented SSE:** proxy parses data lines independently per received byte
-   chunk. Split JSON SSE events still forward byte-for-byte, but usage and
-   finish_reason may be missed. The regression test deliberately captures this.
-2. **Upstream status:** proxy StreamingResponse is initially HTTP 200 even if
-   llama.cpp returned e.g. HTTP 502. SQLite may accurately log 502 while the
-   client sees HTTP 200. Errors in streamed forwarding are logged in finally;
-   if no upstream response was seen, the initial audit status is 200.
-3. **TTFT:** first *network chunk* is measured, not necessarily first token.
-4. **Provenance:** compiled alias/profile policy does not carry the exact YAML
-   layer responsible for each setting. Unknown and observed facts must remain
-   distinct (particularly if S01 introduces additional backends).
-5. **Compile-only side effects:** does not start llama.cpp but writes a
-   generated INI and initializes the local MetricsDatabase. Do not regard it
-   as a read-only operation on an existing instance.
-6. **Ownership:** current lifecycle assumes Dispatcher-managed llama.cpp.
-   Attaching/detaching externally managed engines is outside S00.
-7. **Older docs drift:** historical prose mentions proxy_requests or fresh
-   schema only; the implemented table is metrics_proxy_requests and there are
-   additive migrations. This document does not edit generated context or
-   reinterpret historical data.
-
 ## Automated owner smoke — three installations
+
+**Use the one-command runner below for the owner acceptance test.**
+Running only `uv run --frozen python -m unittest discover -s tests -v`
+covers the deterministic first phase **but does not contact the running
+Dispatcher**. The runner executes that suite *and then* performs the HTTP
+live checks and records launch provenance.
+
+### First observed Speedy / Windows attempt (2026-10-19)
+
+The owner first corrected a profile comment and cleaned up instance repository
+placement before running the unit suite. The submitted first-run log stops
+after **43 tests: 38 passed, 4 errors, 1 skipped**; no live API probe was
+executed. All four errors were Windows `WinError 32` locks when deleting
+temporary test-only SQLite files, **not** observed llama.cpp failures.
+The PR test fixtures now explicitly close SQLite handles and collect pending
+connection cycles before temporary cleanup. The CI workflow now runs the
+same test suite on Windows and Ubuntu; **both jobs pass**.
+This is a test-harness correction, not a production refactor.
+
+**Speedy_Win is still waiting for the first complete one-command owner run**
+including live API checks and startup-baseline capture; do not mark it accepted
+based on the unit suite or CI alone.
+
 
 There are **two independent levels**:
 
@@ -256,6 +219,66 @@ CI and local smoke prove different things: unit tests isolate corner cases
 (including the fragmented-SSE and HTTP-status limitations), whereas live smoke
 verifies the currently running service's public contract. Neither proves a
 future Strata adapter, and no S01 engine refactoring is performed here.
+
+## Run deterministic regression tests
+
+No GPU, GGUF model, Strata, Caddy, network access, secrets, or real instance
+repository is required. Synthetic configuration directories, an in-memory
+HTTP fake and temporary SQLite databases are used. Existing tests still run.
+
+At the Dispatcher repository root (Windows PowerShell or WSL):
+
+~~~shell
+uv sync --frozen
+uv run --frozen python -m unittest discover -s tests -v
+~~~
+
+To run only S00 tests:
+
+~~~shell
+uv run --frozen python -m unittest discover -s tests -p "test_s00*.py" -v
+~~~
+
+The GitHub PR workflow runs the full suite on Windows and Ubuntu and checks
+Python entry points; it does not replace local owner acceptance.
+
+## Observed llama.cpp contract
+
+| Boundary | Behavior characterized |
+|---|---|
+| Configuration | Deep merge model defaults → instance engine defaults → profile; ensemble entry overrides; CLI ad-hoc override has highest priority. |
+| Paths | Instance engine settings beat fallback templates; launcher --bin-dir beats engine bin_dir; --model-root expands the model placeholder (environment is fallback). Executable suffix depends on OS. |
+| Compile-only | Ensemble generates real-model INI sections, router CLI --models-preset and INI hash; proxy-only aliases do not add model sections. Single profile compiles direct CLI args, without router INI. |
+| Public API | /v1/models exposes real plus proxy-only aliases. /debug/preview simulates without forwarding. |
+| Policy | For configured alias, sampling and chat_template_kwargs replace client values; chat_template_kwargs is one whole object, not a recursive merge. Unmanaged fields pass through. |
+| Telemetry | Client intent, resolved profile, target alias, forwarded control snapshot and diff remain distinct. Message/prompt/input content is excluded from the parameter snapshots. Forwarded != engine-observed. |
+| SQLite | PRAGMA user_version=8; table metrics_proxy_requests; view v_proxy_request_summary and runtime performance views. Execution runs record effective binary/version/CLI; loaded models get separate runtime IDs. |
+| Migration | Certain historical req_* fields were already effective values and may be copied to effective_*; unknown historical client aliases, client snapshots, policy origins and unrecoverable binary paths remain NULL. |
+| Lifecycle | Child logs can supply spawned alias/port/effective args. Single-profile mode records one model instance. /stop terminates an active managed child and waits. Reader cancellation propagates. |
+| Crash | An unexpectedly ended single-profile process within 45 seconds uses fatal process exit; ensemble threshold is 15 seconds. Tests stub process exit. |
+
+### Known limitations / bugs (document only in S00)
+
+1. **Fragmented SSE:** proxy parses data lines independently per received byte
+   chunk. Split JSON SSE events still forward byte-for-byte, but usage and
+   finish_reason may be missed. The regression test deliberately captures this.
+2. **Upstream status:** proxy StreamingResponse is initially HTTP 200 even if
+   llama.cpp returned e.g. HTTP 502. SQLite may accurately log 502 while the
+   client sees HTTP 200. Errors in streamed forwarding are logged in finally;
+   if no upstream response was seen, the initial audit status is 200.
+3. **TTFT:** first *network chunk* is measured, not necessarily first token.
+4. **Provenance:** compiled alias/profile policy does not carry the exact YAML
+   layer responsible for each setting. Unknown and observed facts must remain
+   distinct (particularly if S01 introduces additional backends).
+5. **Compile-only side effects:** does not start llama.cpp but writes a
+   generated INI and initializes the local MetricsDatabase. Do not regard it
+   as a read-only operation on an existing instance.
+6. **Ownership:** current lifecycle assumes Dispatcher-managed llama.cpp.
+   Attaching/detaching externally managed engines is outside S00.
+7. **Older docs drift:** historical prose mentions proxy_requests or fresh
+   schema only; the implemented table is metrics_proxy_requests and there are
+   additive migrations. This document does not edit generated context or
+   reinterpret historical data.
 
 ## S01 adapter-boundary proposal (design only, not implementation)
 
