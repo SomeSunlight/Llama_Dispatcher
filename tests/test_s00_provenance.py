@@ -6,6 +6,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
@@ -57,6 +58,75 @@ class ProvenanceTests(unittest.TestCase):
                 prov.pin_startup("Speedy_Win", folder, None)
             self.assertEqual(json.loads(private.read_text())["instance_yaml_sha256"],
                              "hash-yaml")
+
+    def test_windows_duplicate_python_launchers_choose_only_tcp_owner(self):
+        # uv/Python redirectors may expose two otherwise identical commands.
+        # Neither process may be killed, and selection may not use list order.
+        candidate = lambda pid: {
+            "pid": pid,
+            "command": r"python.exe src\dispatcher.py serve --ensemble 3090 --instance Speedy_Win",
+            "capture": "win32_process_commandline",
+            "ensemble": "3090",
+        }
+        rows = [candidate(101), candidate(202)]
+        with patch.object(prov, "_windows_listener_pids", return_value={202}) as lookup:
+            selected = prov._select_windows_candidate(rows, 8001)
+        self.assertEqual(selected["pid"], 202)
+        self.assertEqual(selected["capture"], "win32_tcp_listener_process")
+        self.assertEqual(rows[0]["capture"], "win32_process_commandline")
+        lookup.assert_called_once_with(8001)
+
+    def test_windows_ambiguous_listener_still_fails_without_killing(self):
+        rows = [{"pid": 101}, {"pid": 202}]
+        for owners in ({}, {999}, {101, 202}):
+            with self.subTest(owners=owners), \
+                 patch.object(prov, "_windows_listener_pids", return_value=owners):
+                with self.assertRaisesRegex(prov.ProvenanceError, "could not uniquely match"):
+                    prov._select_windows_candidate(rows, 8001)
+
+    def test_windows_tcp_listener_parser_handles_one_or_several_owners(self):
+        for stdout, expected in (
+            ("[202]", {202}),
+            ("202", {202}),
+            ("[101,202]", {101, 202}),
+            ("[]", set()),
+            ("", set()),
+        ):
+            with self.subTest(stdout=stdout), \
+                 patch.object(prov.subprocess, "run",
+                              return_value=SimpleNamespace(returncode=0, stdout=stdout)) as run:
+                self.assertEqual(prov._windows_listener_pids(8001), expected)
+                ps = run.call_args.args[0][-1]
+                self.assertIn("Get-NetTCPConnection -State Listen -LocalPort 8001", ps)
+
+    def test_windows_duplicate_python_can_use_explicit_unverified_fallback(self):
+        observed = [
+            {"pid": 101, "command": "python src/dispatcher.py serve --ensemble 3090 --instance Speedy_Win",
+             "ensemble": "3090"},
+            {"pid": 202, "command": "python src/dispatcher.py serve --ensemble 3090 --instance Speedy_Win",
+             "ensemble": "3090"},
+        ]
+        declared = r"uv run src/dispatcher.py serve --ensemble 3090 --instance Speedy_Win --model-root c:\AI_Models\LLM\GGUF_Raw"
+        with patch.object(prov.os, "name", "nt"), \
+             patch.object(prov, "_windows_candidates", return_value=observed), \
+             patch.object(prov, "_windows_listener_pids", return_value=set()):
+            with self.assertRaisesRegex(prov.ProvenanceError, "could not uniquely match"):
+                prov.find_launch("Speedy_Win", proxy_port=8001)
+            fallback = prov.find_launch("Speedy_Win", declared, proxy_port=8001)
+        self.assertEqual(fallback["capture"], "user_declared_unverified")
+        self.assertEqual(fallback["command"], declared)
+
+    def test_provenance_receives_proxy_port_and_passes_it_through(self):
+        launch = {"command": "python src/dispatcher.py serve --ensemble 3090 --instance Speedy_Win",
+                  "capture": "win32_tcp_listener_process", "ensemble": "3090"}
+        snap = {"core_commit": "sha-core", "instance_commit": "sha-instance",
+                "instance_yaml_sha256": "sha-yaml", "yaml_count": 3}
+        with tempfile.TemporaryDirectory() as tmp, \
+             patch.object(prov, "find_launch", return_value=launch) as find, \
+             patch.object(prov, "config_snapshot", return_value=snap):
+            self.assertEqual(prov.pin_startup("Speedy_Win", Path(tmp), None,
+                                              proxy_port=8001)["status"], "PASS")
+        find.assert_called_once_with("Speedy_Win", None, proxy_port=8001)
 
     def test_config_snapshot_checks_instance_before_mutation(self):
         with tempfile.TemporaryDirectory() as temp, patch.object(prov, "ROOT", Path(temp)):
