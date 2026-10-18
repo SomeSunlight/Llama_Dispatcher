@@ -121,6 +121,66 @@ def _windows_candidates(instance: str) -> list[dict]:
     return found
 
 
+def _windows_listener_pids(port: int) -> set[int]:
+    """Read the owner(s) of the local listening TCP socket, never touch them.
+
+    Only used to disambiguate multiple Python launchers for the same instance,
+    e.g. the Windows Python virtualenv redirector and its real child process.
+    """
+    _require(1 <= port <= 65535, "Invalid Dispatcher proxy port for process lookup.")
+    ps = (
+        "$ErrorActionPreference = 'Stop'; "
+        f"$ids = @(Get-NetTCPConnection -State Listen -LocalPort {port} "
+        "| Select-Object -ExpandProperty OwningProcess -Unique); "
+        "ConvertTo-Json -InputObject $ids -Compress"
+    )
+    try:
+        proc = subprocess.run(
+            ["powershell.exe", "-NoProfile", "-NonInteractive", "-Command", ps],
+            capture_output=True, text=True, timeout=20, check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return set()
+    if proc.returncode != 0:
+        return set()
+    try:
+        payload = json.loads(proc.stdout)
+    except (ValueError, TypeError):
+        return set()
+    if isinstance(payload, int):
+        payload = [payload]
+    if not isinstance(payload, list):
+        return set()
+    # Ignore system PID 0 and malformed output, without exposing other processes.
+    return {int(x) for x in payload if isinstance(x, int) and x > 0}
+
+
+def _select_windows_candidate(candidates: list[dict], port: int | None) -> dict:
+    """Select only the Python process that owns the Dispatcher proxy socket.
+
+    Never infer ownership from parent/child proximity or simply choose the
+    first matching process. Other same-instance processes may be legitimate.
+    """
+    if len(candidates) == 1:
+        return candidates[0]
+    _require(bool(candidates), "No matching Python Dispatcher process found.")
+    _require(port is not None,
+             "Several Python processes use this instance. Specify a local "
+             "Dispatcher proxy port for safe TCP-listener ownership checks.")
+    owners = _windows_listener_pids(port)
+    matches = [c for c in candidates if c.get("pid") in owners]
+    _require(len(matches) == 1,
+             f"Found {len(candidates)} matching Python processes, but could "
+             f"not uniquely match one to the TCP listener on port {port}. "
+             "No process was stopped. Check Get-NetTCPConnection "
+             f"-LocalPort {port} -State Listen and the owning Python process. "
+             "If the listener cannot be resolved, --launch-command can "
+             "record your manually confirmed startup as unverified.")
+    selected = dict(matches[0])
+    selected["capture"] = "win32_tcp_listener_process"
+    return selected
+
+
 def _declared(instance: str, command: str) -> dict:
     # Operator-supplied Windows command is not roundtripped through POSIX shlex.
     match = re.search(r'(?<!\S)--instance(?:=|\s+)(?:"([^"]+)"|([^\s]+))', command)
@@ -135,7 +195,8 @@ def _declared(instance: str, command: str) -> dict:
             "ensemble": ensemble}
 
 
-def find_launch(instance: str, declared_command: str | None = None) -> dict:
+def find_launch(instance: str, declared_command: str | None = None,
+                proxy_port: int | None = None) -> dict:
     try:
         candidates = (
             _windows_candidates(instance) if os.name == "nt"
@@ -144,12 +205,18 @@ def find_launch(instance: str, declared_command: str | None = None) -> dict:
     except (OSError, ValueError, subprocess.TimeoutExpired):
         candidates = []
 
-    _require(len(candidates) <= 1,
-             f"Multiple running Dispatcher processes use --instance {instance}; "
-             "cannot safely identify which serves this proxy. Stop the extra "
-             "process or use separate instances.")
-    if candidates:
-        captured = candidates[0]
+    if len(candidates) > 1:
+        if os.name == "nt":
+            captured = _select_windows_candidate(candidates, proxy_port)
+        else:
+            raise ProvenanceError(
+                f"Multiple running Dispatcher Python processes use --instance "
+                f"{instance}; cannot identify the proxy owner automatically. "
+                "No process was stopped.")
+    else:
+        captured = candidates[0] if candidates else None
+
+    if captured:
         if declared_command:
             # Compare semantic required options; never claim exact byte-for-byte
             # equality of Windows shell quoting with Win32 process argv.
@@ -200,13 +267,14 @@ def config_snapshot(instance: str, ensemble: str) -> dict:
     }
 
 
-def pin_startup(instance: str, report_dir: Path, declared_command: str | None) -> dict:
+def pin_startup(instance: str, report_dir: Path, declared_command: str | None,
+                proxy_port: int | None = None) -> dict:
     """Pin baseline on first run; subsequent runs fail for changed launch/config.
 
     Report contains only SHA256, source and git revision; complete argv stays
     in local *.baseline.json, never in the shareable smoke report.
     """
-    launch = find_launch(instance, declared_command)
+    launch = find_launch(instance, declared_command, proxy_port=proxy_port)
     ensemble = (
         _argument(launch["argv"], "--ensemble")
         if "argv" in launch else launch.get("ensemble")
@@ -257,9 +325,10 @@ def pin_startup(instance: str, report_dir: Path, declared_command: str | None) -
 
 
 def rebaseline_startup(instance: str, report_dir: Path,
-                       declared_command: str | None) -> dict:
+                       declared_command: str | None,
+                       proxy_port: int | None = None) -> dict:
     """Explicit baseline refresh, never automatic."""
-    launch = find_launch(instance, declared_command)
+    launch = find_launch(instance, declared_command, proxy_port=proxy_port)
     ensemble = (
         _argument(launch["argv"], "--ensemble")
         if "argv" in launch else launch.get("ensemble")
@@ -272,4 +341,4 @@ def rebaseline_startup(instance: str, report_dir: Path,
     if path.exists():
         stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
         path.rename(report_dir / f"s00-{instance}.{stamp}.baseline.json")
-    return pin_startup(instance, report_dir, declared_command)
+    return pin_startup(instance, report_dir, declared_command, proxy_port=proxy_port)
