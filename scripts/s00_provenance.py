@@ -207,8 +207,17 @@ def find_launch(instance: str, declared_command: str | None = None,
 
     if len(candidates) > 1:
         if os.name == "nt":
-            captured = _select_windows_candidate(candidates, proxy_port)
+            try:
+                captured = _select_windows_candidate(candidates, proxy_port)
+            except ProvenanceError:
+                if declared_command:
+                    # Only explicit opt-in, accurately labelled as unverified.
+                    # Never imply that an arbitrary Python process owns the port.
+                    return _declared(instance, declared_command)
+                raise
         else:
+            if declared_command:
+                return _declared(instance, declared_command)
             raise ProvenanceError(
                 f"Multiple running Dispatcher Python processes use --instance "
                 f"{instance}; cannot identify the proxy owner automatically. "
