@@ -1,11 +1,13 @@
 """No external HTTP or inference: characterize S00's one-command smoke runner."""
+import io
 import json
 import sqlite3
-from contextlib import closing
+from contextlib import closing, redirect_stderr, redirect_stdout
 import sys
 import tempfile
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -111,10 +113,23 @@ class SmokeRunnerTests(unittest.TestCase):
                 self.assertEqual(conn.execute(
                     "SELECT COUNT(*) FROM metrics_proxy_requests").fetchone()[0], 1)
 
+    def test_child_unittest_uses_utf8_independently_of_windows_codepage(self):
+        completed = SimpleNamespace(stdout="", stderr="Ran 43 tests in 1.0s\\nOK", returncode=0)
+        with patch.object(smoke.subprocess, "run", return_value=completed) as run, \
+             patch.dict(smoke.os.environ, {"PYTHONIOENCODING": "cp1252"}):
+            passed, count = smoke.run_unit_tests()
+        self.assertTrue(passed)
+        self.assertEqual(count, "43")
+        options = run.call_args.kwargs
+        self.assertEqual(options["encoding"], "utf-8")
+        self.assertEqual(options["env"]["PYTHONIOENCODING"], "utf-8")
+        self.assertEqual(options["errors"], "replace")
+
     def test_one_command_unit_only_generates_safe_report(self):
         with tempfile.TemporaryDirectory() as tmp:
             report = Path(tmp) / "report.json"
-            with patch.object(smoke, "run_unit_tests", return_value=(True, "31")):
+            with patch.object(smoke, "run_unit_tests", return_value=(True, "31")), \
+                 redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
                 exit_code = smoke.main([
                     "--unit-only", "--label", "Laptop_Win", "--report", str(report)])
             self.assertEqual(exit_code, 0)
@@ -133,7 +148,8 @@ class SmokeRunnerTests(unittest.TestCase):
                               side_effect=lambda base, method, route, payload, timeout:
                               send(method, route, payload)), \
                  patch.object(smoke, "pin_startup", return_value={"status": "PASS", "capture": "mock_observed"}), \
-                 patch.object(smoke, "infer", side_effect=AssertionError("unexpected inference")):
+                 patch.object(smoke, "infer", side_effect=AssertionError("unexpected inference")), \
+                 redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
                 exit_code = smoke.main(["--label", "Speedy_Win", "--instance", "Speedy_Win",
                                          "--report", str(report)])
             self.assertEqual(exit_code, 0)
