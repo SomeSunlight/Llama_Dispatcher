@@ -1,6 +1,7 @@
 import asyncio
 import json
 import sqlite3
+from contextlib import closing
 import stat
 import sys
 import tempfile
@@ -33,7 +34,7 @@ class RuntimeProvenanceTests(unittest.TestCase):
                 params={"host": "0.0.0.0", "port": "8081"},
             )
 
-            with sqlite3.connect(db_path) as conn:
+            with closing(sqlite3.connect(db_path)) as conn, conn:
                 row = conn.execute(
                     """
                     SELECT llama_version, llama_binary, cli_command, startup_params
