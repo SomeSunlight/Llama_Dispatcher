@@ -3,6 +3,7 @@ import asyncio
 import json
 import re
 import sqlite3
+from contextlib import closing
 import sys
 import tempfile
 import unittest
@@ -56,7 +57,7 @@ class DatabaseCharacterization(unittest.TestCase):
             prompt_tokens=10, completion_tokens=5, finish_reason="stop",
             duration=0.4, ttft=0.1, status_code=200,
         )
-        with sqlite3.connect(self.path) as con:
+        with closing(sqlite3.connect(self.path)) as con, con:
             version = con.execute("PRAGMA user_version").fetchone()[0]
             tables = {r[0] for r in con.execute(
                 "SELECT name FROM sqlite_master WHERE type='table'")}
@@ -88,7 +89,7 @@ class DatabaseCharacterization(unittest.TestCase):
 
     def test_legacy_request_columns_are_backfilled_only_when_observable(self):
         # A deliberately minimal legacy layout. No real instance DB is modified.
-        with sqlite3.connect(self.path) as con:
+        with closing(sqlite3.connect(self.path)) as con, con:
             con.executescript("""
                 CREATE TABLE execution_runs (
                     run_id TEXT PRIMARY KEY, timestamp TEXT, tool_mode TEXT,
@@ -113,7 +114,7 @@ class DatabaseCharacterization(unittest.TestCase):
             """)
         MetricsDatabase(self.path, SCHEMA, machine_id="later")
         MetricsDatabase(self.path, SCHEMA, machine_id="later")  # idempotent
-        with sqlite3.connect(self.path) as con:
+        with closing(sqlite3.connect(self.path)) as con, con:
             run = con.execute(
                 "SELECT machine_id,llama_binary FROM execution_runs WHERE run_id='old-1'"
             ).fetchone()
