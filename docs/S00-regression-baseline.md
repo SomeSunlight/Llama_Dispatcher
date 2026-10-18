@@ -69,10 +69,21 @@ The live runner now tries to read the **actual running Python Dispatcher
 process command line** on Windows (Win32 process metadata) and WSL/Linux
 (/proc). It verifies the requested --instance, records the **entire observed
 process argv**, including all CLI overrides and paths, and fingerprints the
-local instance YAML files and the Git revisions of core + instance. An OS
-process command line is evidence of how that Python process was invoked,
-but can differ from the original shell's uv run wrapper; it does not
-independently prove which process owns the selected HTTP port.
+local instance YAML files and the Git revisions of core + instance. On Windows, multiple Python process entries for the same instance can be
+normal (for example a venv launcher and the real Python child), especially
+when started through uv. If several matching Python command lines exist,
+the test now checks **Get-NetTCPConnection** for the exact Dispatcher proxy
+listener port, then selects only its owner PID. An Open WebUI *client*
+connection is not a separate listening Dispatcher process and should not
+cause this ambiguity. The script does not stop or restart any process.
+If no unique listener owner can be determined, it still fails safely and
+reports how to diagnose the port; --launch-command remains an explicit
+**user-declared, unverified** alternative.
+
+An OS process command line is evidence of how that Python process was invoked,
+but can differ from the original shell's uv run wrapper. Matching the owning
+listener PID on Windows provides stronger evidence of which process serves
+the chosen HTTP port.
 
 On the **first successful run**, the runner saves the full command and
 configuration fingerprint to reports/s00-INSTANCE.baseline.json, a
@@ -146,6 +157,19 @@ the llama.cpp process need not log any inference. To verify actual
 backend traffic after the default smoke passes, explicitly choose
 `--inference` with an already-loaded/safe model; it sends two tiny
 synthetic requests and may still trigger loading if the model is not loaded.
+
+### Speedy / Windows run 4: live aliases pass; duplicate Python launchers
+
+The owner ran the full S00 command with the existing Dispatcher and Open WebUI.
+Both the complete unit suite and **all four live alias previews passed**:
+GET /v1/models, GET /debug/config, and four POST /debug/preview calls.
+The next phase found multiple Windows Python processes carrying
+--instance Speedy_Win and failed before pinning the startup baseline.
+**This does not imply Open WebUI interfered, nor prove that two HTTP servers
+were running.** The process scanner had counted matching Python command lines
+without checking ownership of proxy port 8001. The fix resolves the TCP
+listener's PID and uses its Python invocation; an ambiguous/missing owner
+still fails safely. The SQLite schema check was not reached in this run.
 
 **Speedy_Win is still waiting for the first complete one-command owner run**
 including live API checks and startup-baseline capture; do not mark it accepted
