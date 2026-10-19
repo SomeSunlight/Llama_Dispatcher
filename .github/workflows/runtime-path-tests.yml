@@ -8,7 +8,13 @@ on:
 
 jobs:
   test:
-    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2022]
+    runs-on: ${{ matrix.os }}
+    env:
+      PYTHONIOENCODING: utf-8  # Windows runner console defaults to cp1252
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v6
@@ -21,6 +27,7 @@ jobs:
       - name: Compile Dispatcher entry points
         run: uv run --frozen python -m py_compile src/dispatcher.py src/dispatcher_core.py src/runtime_paths.py src/engine_environment.py
       - name: Verify generated ContextCanon output
+        if: runner.os == 'Linux'
         run: |
           uvx --from git+https://github.com/SomeSunlight/context-canon.git@4f007eb9a2596a905cd716e2bbefe2351cd4ecdf contextcanon build .
           uvx --from git+https://github.com/SomeSunlight/context-canon.git@4f007eb9a2596a905cd716e2bbefe2351cd4ecdf contextcanon check .

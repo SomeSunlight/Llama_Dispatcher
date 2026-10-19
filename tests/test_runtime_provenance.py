@@ -1,6 +1,7 @@
 import asyncio
 import json
 import sqlite3
+from contextlib import closing
 import stat
 import sys
 import tempfile
@@ -10,13 +11,14 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
+from _sqlite_test_support import sqlite_temp_directory  # noqa: E402
 from database_manager import MetricsDatabase  # noqa: E402
 from dispatcher_core import LlamaOrchestrator  # noqa: E402
 
 
 class RuntimeProvenanceTests(unittest.TestCase):
     def test_execution_run_records_effective_binary_version_and_args(self):
-        with tempfile.TemporaryDirectory() as tmp:
+        with sqlite_temp_directory() as tmp:
             db_path = Path(tmp) / "metrics.db"
             db = MetricsDatabase(
                 db_path=db_path,
@@ -33,7 +35,7 @@ class RuntimeProvenanceTests(unittest.TestCase):
                 params={"host": "0.0.0.0", "port": "8081"},
             )
 
-            with sqlite3.connect(db_path) as conn:
+            with closing(sqlite3.connect(db_path)) as conn, conn:
                 row = conn.execute(
                     """
                     SELECT llama_version, llama_binary, cli_command, startup_params
