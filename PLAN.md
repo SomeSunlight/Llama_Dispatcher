@@ -1,63 +1,106 @@
-# PLAN — Multi-engine Dispatcher (owner-gated program)
+# PLAN — Multi-engine Dispatcher: attach-first, external process supervision
 
-**Status:** Planning recorded 2026-10-16. **No implementation phase started or approved.**  
-**Epic:** [#8](https://github.com/SomeSunlight/Llama_Dispatcher/issues/8) — multi-engine orchestration and metrics.  
-**First implementation issue:** [S00 #19](https://github.com/SomeSunlight/Llama_Dispatcher/issues/19) — tests/characterization only.
+**Planning revision:** 2026-10-19 (proposal for owner review; no runtime/code changes in this PR).
+**Epic:** [#8](https://github.com/SomeSunlight/Llama_Dispatcher/issues/8).
+**Baseline:** S00 [#19](https://github.com/SomeSunlight/Llama_Dispatcher/issues/19) was owner-tested across three Windows/WSL installations and [PR #20](https://github.com/SomeSunlight/Llama_Dispatcher/pull/20) merged into `main` on 2026-10-19.
+**Next coding gate:** S01 [#9](https://github.com/SomeSunlight/Llama_Dispatcher/issues/9), **only after owner acceptance of this planning revision**.
 
-## Why
-Llama Dispatcher is currently a llama.cpp-specific orchestrator/proxy. Speedy_Win now runs Qwen3.8 Flash Next IQ3_S through Strata on RTX 3090, exposed via local Strata `127.0.0.1:8080`, protected Caddy HTTPS and authenticated external `/strata/v1`; Goose and Open WebUI have been validated directly against it. Preserve that working baseline while developing an engine-neutral Dispatcher. Future engine candidates include EXL3 and other formats, but no third-engine driver is in scope.
+> This document defines the **intended future boundary**, not a claim that the current Dispatcher is already attach-only. The currently accepted llama.cpp managed-start path remains functional until a separately approved transition explicitly retires it.
 
-## Decisions / invariants
-- Every phase is an **owner gate**: open scoped PR, tests and local owner-run smoke test, explicit owner's acceptance, then merge; do not advance to a dependent phase or silently migrate another machine. At all times retain a usable accepted main and rollback route.
-- Refactor behind **small backend adapters with declared capabilities**, not scattered `if strata` branches and not a full plugin marketplace. First protect and extract existing llama.cpp behavior.
-- Maintain independent **logical alias**, **physical model/backend**, **config ownership**, **client policy**, **request context**, **process lifecycle**, and **telemetry source**. Preserve existing profile/default/instance/ensemble configuration precedence unless a migration explicitly changes it.
-- Operational actions: **managed start**, **attach existing** (no kill rights), **graceful shutdown of owned backend**, **detach without shutdown**. Explicit process ownership; no mistaken launcher claims on attached runs.
-- Permit heterogeneous engines **in parallel** (e.g. Strata + small llama.cpp) with explicit resource-admission policy to prevent GPU/VRAM/host RAM and Windows commit contention. Capability-specific native features remain available; absence must be explicit.
-- Do **not** replace Strata's model download/packaging, `--data-dir`/`--models-dir`, optimizer/calibration, JSON native features, /metrics or Prometheus exporters. Prefer native integration; no automatic setup/download/calibration on normal serve. Preserve existing speed projection/vision and recent 131072/int8/kv-resident/2048 MiB configuration.
-- Model/engine/data directories resolve through machine-specific runtime input; shared YAML must not contain absolute C:/... or /mnt/c/... roots. Separate Windows and WSL machine identities/history.
-- **Client identity early:** distinct credentials for Goose, Open WebUI and future clients, tracked as client_id with safe key rotation, strict Caddy/Dispatcher trust boundary, no raw keys in Git/SQLite; no unverified attribution through User-Agent.
-- Telemetry has four separate stages: client request, Dispatcher policy resolution, exact HTTP request forwarded, **engine-observed** facts. Existing `effective_params_json` historically means *forwarded* not necessarily internally applied; preserve provenance and unknown/null. No prompts/messages/outputs/Authorization in metrics.
-- SQLite is the durable private telemetry store. Strata native JSON /metrics and /v1/status are primary for performance; log parsing only extra diagnostics. Consistent online backups and opt-in checked/sanitized snapshot publication to Git. No WAL/SHM or live DB tracking; Grafana postponed.
-- Keep direct Strata Caddy route as diagnostic until the Dispatcher /v1 route and per-client auth tests pass. Security and performance must not regress.
+## 1. Goal and observed operating reality
 
-## Ordered gates and dependencies
-**Unchecked means not implemented or owner-approved**, NOT a request to start all items.
+- **Speedy_Win + Strata / Qwen3.8 Flash Next IQ3_S** is the primary local inference platform. The existing Strata `127.0.0.1:8080`, Caddy HTTPS `/strata/v1`, Goose and Open WebUI usage are the working reference, not a platform to rebuild.
+- The laptop's local large-model inference is experimentally useful but not production-viable at acceptable reliability/resources; it is **not** a performance or migration acceptance blocker. The laptop primarily consumes Speedy's service over the home network; remote clients must retain authentication and secure transport.
+- Useful Logseq MCP integration with Strata/Open WebUI is already observed. Semantic indexing and other MCP/CLI services are planned in a **separate services-management workstream**, not in the Dispatcher backend abstraction.
+- The immediate value is **Dispatcher features for the existing Strata process**: aliases and per-client policy, robust tools/vision/streaming/reasoning semantics, request provenance, and subsequently metrics. Do not require a new supervisor before enabling this.
 
-- [ ] **S00 — #19:** Characterization tests and owner-verified baseline for today's llama.cpp contract. First task; no production behavior changes.
-**S00 in review, not accepted:** Draft [PR #20](https://github.com/SomeSunlight/Llama_Dispatcher/pull/20) characterizes baseline main commit `f0fa2e5b2d281f205b64da136ac5d810b396697a` (2026-10-16). Automated Ubuntu + Windows CI checks passed; Speedy_Win's first local unit run identified Windows-only SQLite test-fixture locks, now fixed in PR #20. Full live smoke on Speedy_Win and Laptop_WSL and explicit owner approval are still pending. No subsequent gate is authorized.
+## 2. Architecture decision — who owns what
 
-- [ ] **S01 — #9:** Engine interface and first LlamaCppBackend extraction. Requires S00 approval.
-- [ ] **S02 — #10:** Independent client credentials/identities and explicit `default/enforce/passthrough` request policy. Requires S01. **Before Strata traffic is routed through Dispatcher.**
-- [ ] **S03 — #11:** Strata adapter in `attached` mode with auth, proxy, reasoning semantics, streaming/tools/vision, no lifecycle takeover. Requires S01 + S02.
-- [ ] **S04 — #12:** Generic run/config/provenance/metrics schema and additive migration. Can follow/partially overlap design of S02/S03, but implementation independently gated. Define recorded vs declared vs unknown.
-- [ ] **S05 — #13:** Strata native /metrics and /status collection + SQLite history/deduplication. Requires S03 + S04.
-- [ ] **S06 — #14:** SQLite online snapshot backup, retention and optional safe Git publication. Requires stable S04 migrations. Can be prioritized earlier if data-loss risk warrants it; independent approval.
-- [ ] **S07 — #15:** Native Strata setup handoff, portable path roles, validated runtime config compilation/snapshots and drift preservation. Requires S03 + S04.
-- [ ] **S08 — #16:** Managed lifecycle start/attach/detach/graceful shutdown + crash recovery and memory/resource guard. Requires S07 and S04, maintaining attached reference behavior.
-- [ ] **S09 — #17:** Explicit native Strata calibration management and reporting; import existing results, production vs benchmark provenance. Requires S07 + S08 + S04.
-- [ ] **S10 — #18:** Heterogeneous simultaneously active backend instances and resource-safe ensembles, e.g. Strata + small llama.cpp. Requires preceding shared interface/routing, lifecycle and data contracts.
+| Domain | Owner | Boundary |
+| --- | --- | --- |
+| Ensemble/profile/model defaults, precedence, engine-specific semantic compilation, alias mapping | **Dispatcher** | Single source of model policy and generation settings |
+| OpenAI-compatible proxy, client identity, request policy, routing, inference/proxy metrics | **Dispatcher** | Attach to external engine endpoints; preserve declared / forwarded / observed provenance |
+| Deterministic **launch-plan compilation** from a selected ensemble and machine-local runtime roots | **Dispatcher** | Outputs structured, versioned, secret-free plan; **does not execute it** |
+| OS process start/stop/restart, child trees, resource admission, RAM/commit/VRAM safety, service dependencies, OS health, lifecycle events | **External service manager** | **Only authoritative supervisor** of managed processes, including Dispatcher, Strata, llama.cpp, Caddy and MCP services |
+| Native model packaging, setup, calibration, low-level options and execution | **Strata or llama.cpp** | Do not reimplement engine-native procedures |
+| Application-level tool providers (Logseq, transport, web and future MCP/CLI) | **Their own services** | Manager supervises when needed; Dispatcher is not an MCP registry |
 
-Steps S04/S06 and S07/S09 may be reordered based on owner feedback **only by revising this plan and dependencies explicitly**. No two implementation gates are considered approved by one blanket acceptance.
+**One supervisor** means no second restart loop, kill authority, process discovery-based takeover, or resource scheduling inside Dispatcher. Lightweight backend HTTP health/capability checks remain essential for proxy routing and are **not** OS process supervision. The Dispatcher must never kill an attached service.
 
-## Separate instance-repository migrations (one owner approval each)
-Migrate only after the relevant Dispatcher input schema and mixed-engine behavior have been owner-accepted; produce dry-run diffs and reversible commits. No migrations in this planning operation.
+**Transition:** Existing managed llama.cpp modes, benchmarks and evals remain backward compatible until replacement is explicitly accepted per instance. They are *legacy behavior*, not the desired long-term architecture. First Strata integration runs attach-only; no process migration is needed.
 
-- [ ] [Speedy_Win #3](https://github.com/SomeSunlight/Llama_Dispatcher_Speedy_Win/issues/3) — preserve current 3090 llama.cpp model aliases and working Strata/Caddy setup; first integration trial.
-- [ ] [Speedy_WSL #2](https://github.com/SomeSunlight/Llama_Dispatcher_Speedy_WSL/issues/2) — independent WSL/Linux paths, machine identity and model choices.
-- [ ] [Laptop_Win #3](https://github.com/SomeSunlight/Llama_Dispatcher_Laptop_Win/issues/3) — constrained laptop and existing Windows engines/profiles.
-- [ ] [Laptop_WSL #3](https://github.com/SomeSunlight/Llama_Dispatcher_Laptop_WSL/issues/3) — AI Workstation/aiw integration, Linux path semantics and separate metrics.
+**Supervisor technology is not yet selected.** Evaluate native-host [Process Compose](https://github.com/F1bonacc1/process-compose) against the current Windows startup baseline, with Python for machine-specific planning, command UX and resource policy. Windows Task Scheduler and Linux systemd can bootstrap the supervisor. Do not promise Windows/WSL parity until tested; avoid making Docker a prerequisite for native Strata.
 
-No central bulk migration or copying DBs across instances. Each issue owns review/rollback for that instance.
+See [docs/runtime-ownership-contract.md](docs/runtime-ownership-contract.md) for the target handoff/LaunchPlan contract and transition safety conditions.
 
-## Related, not part of this implementation
-- Existing [#4](https://github.com/SomeSunlight/Llama_Dispatcher/issues/4) — host-memory startup diagnosis; coordinate rather than duplicate.
-- Existing [#7](https://github.com/SomeSunlight/Llama_Dispatcher/issues/7) — engine vs profile ownership documentation; revisit during config generalization.
-- [SomeSunlight/github-local #22](https://github.com/SomeSunlight/github-local/issues/22) — design native parent/sub-issue relationships in local Git-tracked issues. **Not to be implemented now.**
+## 3. Invariants / acceptance policy
 
-## Tracking hierarchy
-GitHub supports native parent/sub-issues, but the currently connected GitHub issue tool does not expose the sub-issue linking operation. For now, epic #8 contains a readable Markdown issue checklist linking each task; this PLAN is the durable ordered dependency/acceptance map. A `1/2` title alone is not a reliable hierarchy.
+- **Owner-gated development**: one scoped issue → tests and PR → owner's local smoke testing and explicit approval → merge → next dependent gate. Keep a working `main`, rollback path, and independent instance migrations.
+- **Do not break Speedy**: leave direct Caddy `/strata/v1` diagnostic route operational until Dispatcher `/v1` is authenticated and validated from Goose and Open WebUI; preserve current 131072 context, image/vision, runtime options and calibration.
+- **Client identity before cutover**: distinct revocable credentials for Goose and Open WebUI; verify Caddy trust boundary, no attribution based solely on User-Agent or untrusted headers. No secrets/prompts/responses in Git, JSON plans, metrics or ordinary logs.
+- **Observed vs declared**: maintain four facts separately: client request, Dispatcher policy, exact forwarded request, engine-observed behavior. Unknown remains unknown. Attached runs must never be recorded as Dispatcher-launched.
+- **Portable configuration**: canonical precedence is model defaults → instance engine defaults → profile → ensemble entry → explicit runtime overrides. Avoid absolute OS roots in shared profiles; preserve independent `Speedy_Win`, `Speedy_WSL`, `Laptop_Win`, `Laptop_WSL` identities/data.
+- **Safety**: no unexpected model download, relocation, calibration, Caddy cutover or automated restarts. External resource manager enforces co-residence and host memory headroom; Dispatcher provides only declared requirements and engine observations.
+- **Resource realism**: severe RAM/VRAM/Windows commit pressure must fail explicitly or defer work rather than silently swap/overcommit and destabilize Strata. Do not treat CPU-only embedding as zero RAM consumption.
+- **No speculative adapters**: begin with existing llama.cpp and Strata. No generalized plugin marketplace or new engine until a concrete need.
 
-## How to resume
-Open epic #8 and the next unchecked issue. Read repository CONTEXT.md (generated; edit CONTEXT.src.md if context changes), supporting required Topic documents, README and current code. Implement **only that issue** on a feature branch with unit/integration tests and appropriate documentation. Provide a PR and succinct manual smoke instructions; await local owner feedback and explicit merge permission. After acceptance update this PLAN checkbox and record tested machines/commit/PR, then start the next approved gate.
+## 4. Ordered Dispatcher gates (individually owner-reviewed)
 
-**Next:** S00 #19, baseline tests, no production code refactor.
+Checked boxes denote **merged and owner-accepted**, not merely coded. Preserve existing issue IDs so historical discussion stays navigable.
+
+- [x] **S00 — [#19](https://github.com/SomeSunlight/Llama_Dispatcher/issues/19)**: Baseline characterization only. [PR #20](https://github.com/SomeSunlight/Llama_Dispatcher/pull/20) accepted and squash-merged on 2026-10-19; owner reports successful runs across three Windows/WSL installations. No production refactor.
+- [ ] **S01 — [#9](https://github.com/SomeSunlight/Llama_Dispatcher/issues/9)**: Extract small, capability-aware llama.cpp backend / compile vs proxy / attachment seams **without changing current managed llama.cpp behavior**. Tests from S00 are mandatory. Define endpoint-attachment contract. Requires S00 and this plan's approval.
+- [ ] **S02 — [#10](https://github.com/SomeSunlight/Llama_Dispatcher/issues/10)**: Per-client authentication/identity and explicit `default/enforce/passthrough` policy, preserving current clients until a tested migration. Requires S01; **required before any Strata production cutover**.
+- [ ] **S03 — [#11](https://github.com/SomeSunlight/Llama_Dispatcher/issues/11)**: **First deliverable with real user value:** Strata HTTP attach-only adapter and proxy aliases; test long streaming/tool calling, vision, reasoning semantics, cancellation, large context and authentication against the currently running Speedy Strata. Do not start/stop Strata; preserve direct Caddy route as fallback. Requires S01 + S02; **external supervisor is NOT a prerequisite**.
+- [ ] **S04 — [#12](https://github.com/SomeSunlight/Llama_Dispatcher/issues/12)**: Additive engine-neutral SQLite/run/config/provenance schema. Attached process is observed, not owned; external supervisor is process-lifecycle authority. Can be designed with S02/S03 but implementation is a separately accepted PR.
+- [ ] **S05 — [#13](https://github.com/SomeSunlight/Llama_Dispatcher/issues/13)**: Strata native `/metrics` / `/status` ingest, lossless missingness and safe correlation with proxy requests. Requires S03 + S04.
+- [ ] **S06 — [#14](https://github.com/SomeSunlight/Llama_Dispatcher/issues/14)**: Verified SQLite online backup/restore with local retention and opt-in sanitized Git snapshots. Requires stable S04; may be independently prioritized for data-protection reasons.
+- [ ] **S07 — [#15](https://github.com/SomeSunlight/Llama_Dispatcher/issues/15)**: Portable native Strata config handoff, **deterministic machine-readable LaunchPlan v1 compiler** and drift-safe previews/snapshots; preserve Strata-native setup/calibration. No engine process start by Dispatcher. Requires S03 and relevant S04 provenance design.
+- [ ] **S08 — [#16](https://github.com/SomeSunlight/Llama_Dispatcher/issues/16)**: **Redefined:** external supervisor handshake, ownership/attach/detach state reporting, readiness and launch-plan/run correlation, compatibility migration from legacy managed startup. **Do not implement** a second start/stop/restart supervisor inside Dispatcher. Requires S07, S04 and a separately proven external-manager contract.
+- [ ] **S09 — [#17](https://github.com/SomeSunlight/Llama_Dispatcher/issues/17)**: Import native Strata calibration/history and offer explicit handoff for opt-in native calibration with operator/manager approval; no Dispatcher process scheduling. Requires S07, S04 and manager handoff for active calibration.
+- [ ] **S10 — [#18](https://github.com/SomeSunlight/Llama_Dispatcher/issues/18)**: Heterogeneous aliases/HTTP routing to multiple *attached* engines and consistent telemetry. No engine process ownership; process admission, OS memory and restart remain external. Requires accepted multi-engine routing/config contracts and tested supervisor safety where co-resident processes are used.
+
+S03 is the earliest meaningful Speedy/Strata integration gate. S04–S10 are **not** authorization to implement everything after S01. Dependency changes require an explicit PLAN review.
+
+## 5. Parallel external-service-manager workstream (different repository)
+
+This is the **target design**, not a claim that a repo or process manager already exists:
+
+- **M00 / discovery:** inventory the accepted Speedy Windows PowerShell start of Strata, Caddy and Open WebUI; reproduce non-destructive health/ownership checks and reliable graceful shutdown. Compare Process Compose with native OS supervisor facilities. Select tooling only after Windows proof.
+- **M01 / viable service manager:** Python configuration/CLI + chosen supervisor, idempotent start, health, logs, stop, identity ownership, rollback, no double-start. Test Windows first, then WSL, then native Linux when available. Do not require Dispatcher changes for initial service management.
+- **M02 / background services:** manage existing Logseq MCP, incremental LanceDB indexer and CPU-only llama.cpp embedding service with bounded RAM/CPU use; verify sleep/load behavior and embedding API timeout before promising on-demand availability. Keep private Logseq graph and vectors outside Git.
+- **M03 / Dispatcher handoff:** consume LaunchPlan v1 from S07, launch engines according to policy, publish **observed** receipt (PID/start time/config hash/endpoints) and run health; Dispatcher attaches independently. No parallel process owner.
+- **M04 / extensibility:** add explicitly approved MCP/CLI services (e.g. web and SBB lookup) via appropriate stdio/HTTP mechanisms, not a permanent daemon per tool. Tool permissions restricted; no unconstrained LLM process-management access.
+
+The external workstream can advance **in parallel** with S01–S03. It is not a new blocker for getting Strata behind Dispatcher.
+
+## 6. Instance migrations and operational rollout
+
+Independent instance repositories remain separately owned; each migration gets a dry-run diff, rollback and an owner approval:
+
+- [ ] [Speedy_Win #3](https://github.com/SomeSunlight/Llama_Dispatcher_Speedy_Win/issues/3) — **first production Strata attach/cutover** after S03; keep direct Caddy Strata route until verified.
+- [ ] [Speedy_WSL #2](https://github.com/SomeSunlight/Llama_Dispatcher_Speedy_WSL/issues/2) — defer until a real local use case; preserve WSL identity/data.
+- [ ] [Laptop_Win #3](https://github.com/SomeSunlight/Llama_Dispatcher_Laptop_Win/issues/3) — optional/experimental local inference, not a production-performance target.
+- [ ] [Laptop_WSL #3](https://github.com/SomeSunlight/Llama_Dispatcher_Laptop_WSL/issues/3) — WSL local inference is optional; remote access to Speedy does **not** require a laptop backend migration.
+
+Do not copy metrics DBs or host-specific roots across machines. Client-side use of Speedy from laptop should be secure and should not start another Strata process.
+
+## 7. Existing issues whose scope must be reconciled
+
+- [#16](https://github.com/SomeSunlight/Llama_Dispatcher/issues/16) currently describes an in-Dispatcher lifecycle supervisor. **Supersede that implementation scope**, preserve its history, and redirect process management to the new services workstream.
+- [#18](https://github.com/SomeSunlight/Llama_Dispatcher/issues/18) has process admission/start/stop in Dispatcher. Move those to the manager; retain heterogeneous model routing and metric semantics.
+- [#15](https://github.com/SomeSunlight/Llama_Dispatcher/issues/15) owns native Strata config handling and a versioned, side-effect-free launch-plan compiler.
+- [#17](https://github.com/SomeSunlight/Llama_Dispatcher/issues/17) must hand native calibration execution to the engine/manager, not become an engine launcher.
+- [#4](https://github.com/SomeSunlight/Llama_Dispatcher/issues/4) concerns host-memory monitoring during startup, now primarily external-manager scope. Preserve Dispatcher engine-observed diagnostics.
+- [#7](https://github.com/SomeSunlight/Llama_Dispatcher/issues/7) configuration ownership remains relevant; adjust documentation to make launch-plan ownership explicit.
+
+The issue bodies from the 2026-10-16 roadmap may still describe the **old** process-manager design until the owner approves this planning PR. Do not implement their conflicting portions.
+
+## 8. How to resume safely
+
+1. Owner reviews/accepts this architecture plan; then update Epic #8 and conflicting issue bodies, and create/confirm the independent service-manager project's tracking issues.
+2. Start **S01 #9 only**, using the accepted merged S00 test suite. Produce one focused PR with actual Windows/WSL-relevant automated tests, manual Speedy smoke/rollback steps and no other gate's code.
+3. Continue S02 → S03, retaining current Speedy Strata as reference and Caddy fallback. No forced move to the external supervisor.
+4. Advance telemetry, compilation and supervisor integration in separately approved gates, then selectively migrate instances.
+
+**Next after plan approval:** S01 #9. **First production-user milestone:** S03 #11, Strata attach and authenticated proxy aliases.
