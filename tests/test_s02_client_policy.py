@@ -215,7 +215,7 @@ class ProxyAndSchemaTests(unittest.IsolatedAsyncioTestCase):
             }, identity)
             response = await core.proxy_to_llama("chat/completions", req)
             self.assertEqual(response.status_code, 200)
-            await response.body_iterator.__anext__()
+            _ = b"".join([chunk async for chunk in response.body_iterator])
         self.assertEqual(json.loads(fake.kwargs["content"])["temperature"], 0.9)
         self.assertEqual(json.loads(fake.kwargs["content"])["top_p"], 0.8)
         self.assertEqual(json.loads(fake.kwargs["content"])["model"], "base")
