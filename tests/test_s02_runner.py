@@ -5,6 +5,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
@@ -16,17 +17,34 @@ spec.loader.exec_module(runner)
 
 
 class OwnerRunnerTests(unittest.TestCase):
-    def test_all_targets_are_explicitly_loopback_and_manual_by_default(self):
-        self.assertEqual(set(runner.MACHINES), {
-            "Laptop_Win", "Laptop_WSL", "Speedy_Win", "Speedy_WSL",
-        })
-        for config in runner.MACHINES.values():
-            self.assertIsNone(config["start_command"])
-            runner.endpoint(config["url"])
+    def test_one_runner_accepts_explicit_local_instance_without_machine_table(self):
+        self.assertEqual(runner.endpoint(runner.DEFAULT_URL), ("127.0.0.1", 8001))
         for url in ("https://example.org:8080", "http://192.168.0.12:8001",
                     "http://127.0.0.1:8080/strata/v1"):
             with self.assertRaises(runner.CheckError):
                 runner.endpoint(url)
+        with self.assertRaises(runner.CheckError):
+            runner.launch_file("../outside")
+
+    def test_capture_and_reload_verified_local_start_without_process_control(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            argv = [sys.executable, str(root / "src" / "dispatcher.py"),
+                    "serve", "--ensemble", "test", "--instance", "Laptop_Win"]
+            observation = {"capture": "procfs_python_argv", "argv": argv}
+            with patch.object(runner, "ROOT", root), \\
+                 patch.object(runner, "is_listening", return_value=True), \\
+                 patch.object(runner, "find_launch", return_value=observation):
+                runner.save_start("Laptop_Win", runner.DEFAULT_URL)
+                private_file = runner.launch_file("Laptop_Win")
+                self.assertTrue(private_file.is_file())
+                self.assertEqual(
+                    runner.load_start("Laptop_Win", runner.DEFAULT_URL), argv,
+                )
+                with self.assertRaises(runner.CheckError):
+                    runner.load_start("Laptop_WSL", runner.DEFAULT_URL)
+                with self.assertRaises(runner.CheckError):
+                    runner.load_start("Laptop_Win", "http://127.0.0.1:8100")
 
     def test_private_fixture_is_valid_and_does_not_contain_bearer_tokens(self):
         with tempfile.TemporaryDirectory() as temp:
