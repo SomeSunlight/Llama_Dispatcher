@@ -1,76 +1,61 @@
-# S02 in drei Minuten verstehen und testen
+# S02 — Kurztest auf Laptop / Windows
 
-**Du brauchst jetzt nur Laptop/Windows. Kein Goose, kein Open WebUI und kein Strata.**
+## Wozu?
 
-## Was wird geprüft?
+Wir prüfen zwei **simulierte** Clients (Goose und Open WebUI):
+Jeder bekommt ein anderes Test-Token. Der Dispatcher muss beide unterscheiden,
+verschiedene Parameterregeln anwenden, unerlaubte Anfragen abweisen und die
+richtige Client-ID in SQLite protokollieren.
 
-Die Tests tun so, als gäbe es zwei Clients: **Goose** und **Open WebUI**.
-Sie prüfen, ob der Dispatcher die zwei Zugangsschlüssel unterscheiden kann,
-welche Parameterregeln er anwendet und ob SQLite die richtige Client-ID erfasst.
-Das sind *simulierte* Clients; sie müssen nicht installiert oder gestartet sein.
+**Goose, Open WebUI und Strata müssen dazu nicht laufen.**
+Es genügt die vorhandene Laptop-Windows-Instanz mit llama.cpp.
 
-## A. Bestehenden Dispatcher testen (jetzt sofort)
+## Drei Schritte — keine Skriptänderungen
 
-Den **bereits laufenden** Laptop/Windows-Dispatcher mit dem aktuellen PR-Code
-normal starten. Dann in deinem gewohnten PyCharm-Terminal:
+**1. Während der normale Laptop-Windows-Dispatcher noch läuft:** Das bereits
+bewährte Startkommando einmalig automatisch erfassen:
 
 ```powershell
-uv run --frozen python scripts/s02_verify.py --instance Laptop_Win
+uv run --frozen python scripts/s02_verify.py --instance Laptop_Win --save-start
 ```
 
-Der Befehl führt automatisch alle Unit-Tests aus, prüft die laufende lokale
-HTTP-Schnittstelle und das SQLite-v9-Schema. Es wird **nichts gestartet oder
-gestoppt**, keine Inferenz gesendet und kein Modell verändert.
+Das Programm liest das tatsächliche Startkommando aus dem lokalen
+Betriebssystem und speichert die Einstellungen **nur auf diesem Rechner** in
+`reports/s02-Laptop_Win.launch.json`. Diese Datei ist Git-ignoriert,
+enthält lokale Startpfade und muss normalerweise nie bearbeitet werden.
+Das Programm startet oder beendet dabei **nichts**.
 
-Die isolierten Unit-Tests prüfen bereits beide simulierten Clients, Tokens,
-Regeln, abgewiesene Zugriffe, Header-Spoofing und Datenbank-Provenienz.
-Bei der laufenden alten (authentifizierungsfreien) Instanz ist der
-zusätzliche *echte* Zwei-Token-Test ausdrücklich SKIP.
+**2. Den normalen Laptop-Windows-Testdispatcher selbst regulär beenden**, sodass
+der lokale API-Port frei wird. Der Test darf keinen fremden Prozess übernehmen.
 
-## B. Vollständiger Zwei-Client-Live-Test (optional, später)
-
-Nur für eine nichtproduktive **llama.cpp-Testinstanz**:
-
-1. In `scripts/s02_verify.py` **oben** bei `Laptop_Win` das
-   `start_command: None` durch eine Python-Liste mit **deinem vorhandenen
-   Dispatcher-Startkommando** ersetzen. Eine kommentierte Vorlage steht direkt
-   darunter. Bestehende `--instance`, `--ensemble`, `--bin-dir`,
-   `--model-root` unverändert übernehmen.
-2. Den bestehenden **Laptop-Windows-Testdispatcher selbst beenden**, damit
-   Port 8001 frei ist. Das Programm beendet niemals einen fremden Prozess.
-3. Im gewohnten Projektordner ausführen:
+**3. Den automatischen Live-Test durchführen:**
 
 ```powershell
 uv run --frozen python scripts/s02_verify.py --instance Laptop_Win --start --inference
 ```
 
-Das Programm erzeugt **selbst** zwei einmalige Test-Token, startet **nur**
-den konfigurierten lokalen Test-Dispatcher, prüft 401/200, Identitäten,
-Policy, Alias-Vorschauen, zwei winzige Modellanfragen und SQLite-v9-Logs.
-Es schaltet danach seinen selbst gestarteten Prozess ab. Eine ältere SQLite-DB
-wird vor der automatischen Schema-Migration mit SQLite sicher als `*.bak`
-gesichert. Bei Fehlern bricht es ab, statt Prozesse zu übernehmen.
+Jetzt startet das Programm **nur** den zuvor erfassten Testdispatcher,
+erzeugt zwei **einmalige** private Token, überprüft Authentifizierung,
+Parameterregeln, HTTP und zwei sehr kurze Inferenzanfragen, liest SQLite v9
+und beendet seinen eigenen Testprozess wieder.
 
-Deine vorhandene `C:\llama.cpp\clients.json` wird **nicht benötigt,
-überschrieben oder gelöscht**. Sie ist für eine spätere echte
-Client-Konfiguration gedacht. Für diesen technischen Test reichen automatisch
-erzeugte Einmal-Schlüssel.
+Deine vorhandene `C:\llama.cpp\clients.json` wird nicht verwendet oder
+verändert. Der Test erstellt seine Wegwerf-Tokens selbst.
 
-## Auf welchen Rechnern?
+## Auch auf anderen Maschinen?
 
-| Ort | Sinnvolle Nutzung |
-| --- | --- |
-| **Laptop / Windows** | **Jetzt:** S02-Testinstanz, ohne Goose/Open WebUI |
-| Laptop / WSL | Optional später dieselben Tests; hier laufen deine echten Clients |
-| Speedy / Windows | Erst später Strata-Anschluss (S03); **produktives Strata nicht anrühren** |
-| Speedy / WSL | Nur wenn dort tatsächlich eine separate Testinstanz besteht |
+**Ein einziges `scripts/s02_verify.py` für alle Rechner.**
+Die Befehle bleiben gleich, nur `--instance` ist anders, z. B.
+`Laptop_WSL` oder `Speedy_Win`. Das erfasste Startkommando ist jeweils
+lokal gespeichert, nicht im gemeinsamen Testcode. Wenn der API-Port
+nicht 8001 ist, kann `--base-url http://127.0.0.1:PORT` ergänzt werden.
 
-Auf anderen Rechnern einfach die richtige `--instance` angeben und dort
-das jeweilige lokale Testkommando konfigurieren. Es ist **kein** zentraler
-Testlauf über Rechnergrenzen hinweg: jeder Rechner prüft seinen eigenen
-Dispatcher und seine eigene SQLite-Datei.
+**Nicht für den produktiven Strata-Prozess verwenden.**
+S03 prüft Strata separat; dieser S02-Runner darf nur eine bewusst ausgewählte,
+nichtproduktive llama.cpp-Testinstanz starten.
 
-**Die Ausgabe am Schluss genügt.** Bei FAIL die Ausgabe als `.log`-Datei
-anhängen. Kein manuelles Kopieren ganzer Testprotokolle in den Chat nötig.
+Bei Problemen genügt die letzte `S02 PASS`- oder `S02 FAIL`-Meldung
+plus wenige Zeilen darum herum. Eine längere Ausgabe bitte als Logdatei
+anhängen.
 
-Details/Architektur: [S02-client-identities.md](S02-client-identities.md).
+Ausführliche Hintergründe: [S02-client-identities.md](S02-client-identities.md).
