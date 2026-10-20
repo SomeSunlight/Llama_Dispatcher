@@ -348,24 +348,33 @@ def stop_our_process(proc: subprocess.Popen, url: str, token: str | None) -> Non
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="S02: easy, cross-platform client verification")
-    parser.add_argument("--instance", required=True, choices=sorted(MACHINES))
+    parser.add_argument("--instance", required=True,
+                        help="Your existing local Dispatcher instance name (e.g. Laptop_Win)")
+    parser.add_argument("--base-url", default=DEFAULT_URL,
+                        help="Local Dispatcher URL, normally http://127.0.0.1:8001")
+    parser.add_argument("--save-start", action="store_true",
+                        help="Capture the existing running test Dispatcher start command locally")
     parser.add_argument("--start", action="store_true",
-                        help="Launch ONLY the configured local test Dispatcher with throwaway clients")
+                        help="Start ONLY your previously captured local test Dispatcher")
     parser.add_argument("--inference", action="store_true",
                         help="Send two small real model requests when --start is used")
     args = parser.parse_args()
-    config = MACHINES[args.instance]
-    url = config["url"]
+    url = args.base_url.rstrip("/")
     try:
+        require(bool(_INSTANCE_RE.fullmatch(args.instance)), "Invalid instance name.")
         endpoint(url)
+        require(not (args.save_start and (args.start or args.inference)),
+                "Use --save-start by itself, while the original test Dispatcher is running.")
         print(f"S02 verification: {args.instance} (local Dispatcher, not Strata)")
         unit_tests()
+        if args.save_start:
+            save_start(args.instance, url)
+            print("S02 START COMMAND SAVED")
+            return 0
         require(args.start or not args.inference,
                 "--inference requires --start to verify both temporary clients.")
         if args.start:
-            command = config["start_command"]
-            require(command is not None, "Set start_command in the top config block first.")
-            check_command(command, args.instance)
+            command = load_start(args.instance, url)
             require(not is_listening(url),
                     "Port is occupied: stop your EXISTING *test* Dispatcher yourself. "
                     "This script will never take over another process.")
