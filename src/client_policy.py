@@ -86,7 +86,7 @@ def load_client_security(path: str | None = None) -> ClientSecurity:
             raise ClientConfigurationError("Invalid client id.")
         if not isinstance(digest, str) or not _DIGEST_RE.fullmatch(digest):
             raise ClientConfigurationError("Expected lowercase SHA-256 token digest.")
-        if mode not in MODES:
+        if not isinstance(mode, str) or mode not in MODES:
             raise ClientConfigurationError("Invalid client policy mode.")
         if client_id in seen_ids or digest in seen_digests:
             raise ClientConfigurationError("Duplicate client id or credential digest.")
@@ -113,7 +113,7 @@ def apply_request_policy(
     if mode != "passthrough":
         for key, value in profile_params.items():
             if mode == "enforce" or key not in result:
-                if result.get(key) != value:
+                if key not in result or result[key] != value:
                     injected[key] = value
                 result[key] = value
     return result, injected
