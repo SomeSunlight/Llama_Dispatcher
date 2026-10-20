@@ -48,13 +48,16 @@ def validate_base_url(base_url: str) -> str:
 
 
 def http_json(base_url: str, method: str, route: str, payload: dict | None,
-              timeout: float) -> dict:
+              timeout: float, bearer_token: str | None = None) -> dict:
     content = json.dumps(payload).encode("utf-8") if payload is not None else None
     req = request.Request(
         base_url + route,
         data=content,
         method=method,
-        headers={"Content-Type": "application/json"},
+        headers={
+            "Content-Type": "application/json",
+            **({"Authorization": "Bearer " + bearer_token} if bearer_token else {}),
+        },
     )
     try:
         with request.urlopen(req, timeout=timeout) as resp:
@@ -122,22 +125,36 @@ def inspect_live(send) -> tuple[dict, str]:
                 f"Alias remapping mismatch for {alias!r}.")
         forwarded = result.get("forwarded_body")
         require(isinstance(forwarded, dict), f"Missing forwarded_body for {alias!r}.")
+        mode = result.get("policy_mode", "enforce")
+        require(mode in ("default", "enforce", "passthrough"),
+                f"Unknown request policy mode for {alias!r}.")
         expected = dict(original)
-        expected.update(policy)  # policy objects, including chat_template_kwargs, REPLACE
+        expected_injected = {}
+        if mode != "passthrough":
+            for key, value in policy.items():
+                if mode == "enforce" or key not in expected:
+                    if key not in expected or expected[key] != value:
+                        expected_injected[key] = value
+                    expected[key] = value
         expected["model"] = target or alias
+        # Authenticated diagnostic responses redact content; legacy S00 doesn't.
+        for content_key in ("messages", "prompt", "input", "tools", "tool_calls",
+                            "functions", "documents", "audio", "image", "images",
+                            "file", "files"):
+            if content_key in expected and forwarded.get(content_key) == "<redacted>":
+                expected[content_key] = "<redacted>"
         require(forwarded == expected,
                 f"Forwarded preview differs from the expected policy for {alias!r}.")
         injected = result.get("injected_params")
         overridden = result.get("overridden_by_client")
         require(isinstance(injected, dict) and isinstance(overridden, dict),
                 f"Missing injected/overridden preview fields for {alias!r}.")
-        for key, value in policy.items():
-            if original.get(key) != value:
-                require(key in injected and injected[key].get("from_profile") == value,
-                        f"Preview does not report injection of {key!r} for {alias!r}.")
-                if key in original and key != "chat_template_kwargs":
-                    require(overridden.get(key) == original[key],
-                            f"Preview does not report overridden {key!r} for {alias!r}.")
+        for key, value in expected_injected.items():
+            require(key in injected and injected[key].get("from_profile") == value,
+                    f"Preview does not report injection of {key!r} for {alias!r}.")
+            if key in original and key != "chat_template_kwargs":
+                require(overridden.get(key) == original[key],
+                        f"Preview does not report overridden {key!r} for {alias!r}.")
     return {
         "alias_count": len(ids),
         "real_aliases": len(ids) - count_proxy_only,
@@ -168,7 +185,8 @@ def read_db_metadata(path: Path) -> dict | None:
     return {"schema_version": version, "proxy_table": True, "summary_view": True}
 
 
-def infer(base_url: str, model: str, timeout: float) -> dict:
+def infer(base_url: str, model: str, timeout: float,
+          bearer_token: str | None = None) -> dict:
     """Explicit opt-in; verifies real non-stream and stream paths, no response content saved."""
     body = {
         "model": model,
@@ -176,7 +194,8 @@ def infer(base_url: str, model: str, timeout: float) -> dict:
         "max_tokens": 3,
         "stream": False,
     }
-    nonstream = http_json(base_url, "POST", "/v1/chat/completions", body, timeout)
+    nonstream = http_json(base_url, "POST", "/v1/chat/completions", body, timeout,
+                          bearer_token)
     require(isinstance(nonstream.get("choices"), list) and nonstream["choices"],
             "Non-streamed inference returned no choices.")
     stream_body = {**body, "stream": True}
@@ -184,7 +203,10 @@ def infer(base_url: str, model: str, timeout: float) -> dict:
         base_url + "/v1/chat/completions",
         method="POST",
         data=json.dumps(stream_body).encode("utf-8"),
-        headers={"Content-Type": "application/json"},
+        headers={
+            "Content-Type": "application/json",
+            **({"Authorization": "Bearer " + bearer_token} if bearer_token else {}),
+        },
     )
     events = 0
     done = False
@@ -243,6 +265,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--label", default=None, help="Label in result (e.g. Speedy_Win)")
     parser.add_argument("--report", type=Path, help="Optional JSON report path")
     parser.add_argument("--unit-only", action="store_true", help="Skip live probes if server retired")
+    parser.add_argument("--bearer-token-env", metavar="ENV_NAME",
+                        help="Read a local test client token from an environment variable; never from CLI args/reports")
     parser.add_argument("--inference", action="store_true",
                         help="Opt in to two real three-token requests, one streaming")
     parser.add_argument("--inference-timeout", type=float, default=300)
@@ -267,6 +291,9 @@ def main(argv: list[str] | None = None) -> int:
         if args.http_timeout <= 0 or args.inference_timeout <= 0:
             raise SmokeFailure("Timeouts must be positive.")
         base_url = validate_base_url(args.base_url) if not args.unit_only else None
+        token = os.environ.get(args.bearer_token_env) if args.bearer_token_env else None
+        if args.bearer_token_env:
+            require(bool(token), "Specified --bearer-token-env is missing or empty.")
         print("[S00] Running repository unit tests...")
         passed, count = run_unit_tests()
         result["checks"]["unit_tests"] = {"status": "PASS" if passed else "FAIL", "count": count}
@@ -275,6 +302,8 @@ def main(argv: list[str] | None = None) -> int:
             print(f"[S00] Checking existing local Dispatcher at {base_url}...")
             def send(method: str, route: str, payload: dict | None) -> dict:
                 print(f"[S00] HTTP {method} {route} (Dispatcher proxy)")
+                if token:
+                    return http_json(base_url, method, route, payload, args.http_timeout, token)
                 return http_json(base_url, method, route, payload, args.http_timeout)
             inspection, selected_model = inspect_live(send)
             result["checks"]["live_preview"] = {"status": "PASS", **inspection}
@@ -300,7 +329,7 @@ def main(argv: list[str] | None = None) -> int:
             if args.inference:
                 print("[S00] Opt-in inference: two tiny requests (may trigger model load)...")
                 result["checks"]["inference"] = {
-                    "status": "PASS", **infer(base_url, selected_model, args.inference_timeout)
+                    "status": "PASS", **infer(base_url, selected_model, args.inference_timeout, token)
                 }
             else:
                 result["checks"]["inference"] = {
