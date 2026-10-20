@@ -45,7 +45,7 @@ class RuntimeProvenanceTests(unittest.TestCase):
                 ).fetchone()
                 user_version = conn.execute("PRAGMA user_version").fetchone()[0]
 
-            self.assertEqual(user_version, 8)
+            self.assertEqual(user_version, 9)
             self.assertEqual(row[0], "llama.cpp version 1234 (abcdef)")
             self.assertEqual(row[1], "/effective/llama/bin/llama-server")
             self.assertTrue(row[2].startswith("/effective/llama/bin/llama-server"))
