@@ -161,10 +161,10 @@ def read_db_metadata(path: Path) -> dict | None:
                 "SELECT name FROM sqlite_master WHERE type IN ('table','view')")}
     except sqlite3.Error as exc:
         raise SmokeFailure(f"Existing metrics DB cannot be read ({type(exc).__name__}).") from None
-    require(version == 8 and
+    require(version == 9 and
             {"metrics_proxy_requests", "v_proxy_request_summary",
              "execution_runs", "serve_model_instances"}.issubset(names),
-            "Existing metrics DB does not have the expected v8 schema/views.")
+            "Existing metrics DB does not have the expected v9 schema/views.")
     return {"schema_version": version, "proxy_table": True, "summary_view": True}
 
 
