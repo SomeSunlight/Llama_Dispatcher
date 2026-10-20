@@ -32,9 +32,9 @@ class OwnerRunnerTests(unittest.TestCase):
             argv = [sys.executable, str(root / "src" / "dispatcher.py"),
                     "serve", "--ensemble", "test", "--instance", "Laptop_Win"]
             observation = {"capture": "procfs_python_argv", "argv": argv}
-            with patch.object(runner, "ROOT", root), \\
-                 patch.object(runner, "is_listening", return_value=True), \\
-                 patch.object(runner, "find_launch", return_value=observation):
+            with (patch.object(runner, "ROOT", root),
+                  patch.object(runner, "is_listening", return_value=True),
+                  patch.object(runner, "find_launch", return_value=observation)):
                 runner.save_start("Laptop_Win", runner.DEFAULT_URL)
                 private_file = runner.launch_file("Laptop_Win")
                 self.assertTrue(private_file.is_file())
