@@ -14,6 +14,7 @@ from inference_backend import (  # noqa: E402
     BackendCapabilities, BackendEndpoint, LlamaCppBackend,
     UnsupportedBackendCapability,
 )
+from dispatcher_core import LlamaOrchestrator, LEGACY_LLAMA_BACKEND  # noqa: E402
 
 
 class BackendContractTests(unittest.TestCase):
@@ -48,6 +49,17 @@ class BackendContractTests(unittest.TestCase):
         compiler.compile_serve_profile.assert_called_once_with("work", overrides)
         self.assertIs(self.backend.compile_task(compiler, "work", "bench", overrides), expected)
         compiler.compile_task_profile.assert_called_once_with("work", "bench", overrides)
+
+    def test_legacy_lifecycle_fixture_bypasses_init_but_still_has_backend(self):
+        # S00 deliberately uses object.__new__ to avoid a real SQLite DB.
+        # The backend must therefore be available without __init__.
+        bare = object.__new__(LlamaOrchestrator)
+        self.assertIs(bare.backend, LEGACY_LLAMA_BACKEND)
+        self.assertIsInstance(bare.backend, LlamaCppBackend)
+        bare.compile_serve_profile = Mock(return_value=("llama-server", {}, []))
+        self.assertEqual(bare.backend.compile_profile(bare, "work", {}),
+                         ("llama-server", {}, []))
+        bare.compile_serve_profile.assert_called_once_with("work", {})
 
     def test_managed_llama_endpoint_preserves_the_current_proxy_target(self):
         endpoint = self.backend.legacy_endpoint(8181)
