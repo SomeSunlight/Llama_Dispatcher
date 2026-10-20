@@ -257,8 +257,12 @@ def quote_cmd(parts: list[str]) -> str:
 
 
 class LlamaOrchestrator:
+    # Class-level default also supports pre-existing S00 fixtures that create a
+    # bare orchestrator with object.__new__() and intentionally bypass __init__.
+    # An instance can still explicitly select its backend in later gates.
+    backend = LEGACY_LLAMA_BACKEND
+
     def __init__(self, machine_id: str = "unknown"):
-        self.backend = LEGACY_LLAMA_BACKEND
         self.current_process: asyncio.subprocess.Process | None = None
         self.is_running: bool = False
         # Instance mode (--instance): DATA_DIR = instances/<name>/data/ → metrics.db
