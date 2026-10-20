@@ -21,8 +21,12 @@ from fastapi.responses import JSONResponse, Response, StreamingResponse
 from pydantic import BaseModel, Field
 
 from database_manager import MetricsDatabase
+from inference_backend import LlamaCppBackend
 
 app = FastAPI(title="Llama Dispatcher Control API")
+
+# S01 selects only the existing llama.cpp adapter. No Strata/attach runtime yet.
+LEGACY_LLAMA_BACKEND = LlamaCppBackend()
 
 # Project paths: works both as src/dispatcher.py and directly in the project root.
 SCRIPT_DIR = Path(__file__).resolve().parent
@@ -253,6 +257,11 @@ def quote_cmd(parts: list[str]) -> str:
 
 
 class LlamaOrchestrator:
+    # Class-level default also supports pre-existing S00 fixtures that create a
+    # bare orchestrator with object.__new__() and intentionally bypass __init__.
+    # An instance can still explicitly select its backend in later gates.
+    backend = LEGACY_LLAMA_BACKEND
+
     def __init__(self, machine_id: str = "unknown"):
         self.current_process: asyncio.subprocess.Process | None = None
         self.is_running: bool = False
@@ -998,7 +1007,7 @@ class LlamaOrchestrator:
         self.is_running = True
         while self.is_running:
             try:
-                binary, compiled_params, cli_args = self.compile_serve_profile(profile_name, overrides)
+                binary, compiled_params, cli_args = self.backend.compile_profile(self, profile_name, overrides)
                 effective_binary = str(Path(binary).expanduser().resolve())
                 llama_ver = await self.get_llama_version(Path(effective_binary))
 
@@ -1092,7 +1101,7 @@ class LlamaOrchestrator:
         self.is_running = True
         while self.is_running:
             try:
-                binary, compiled_params, cli_args = self.compile_serve_ensemble(ensemble_name, overrides)
+                binary, compiled_params, cli_args = self.backend.compile_ensemble(self, ensemble_name, overrides)
                 effective_binary = str(Path(binary).expanduser().resolve())
                 llama_ver = await self.get_llama_version(Path(effective_binary))
 
@@ -1188,7 +1197,7 @@ class LlamaOrchestrator:
                 await asyncio.sleep(5)
 
     async def run_bench(self, profile_name: str, overrides: dict):
-        binary, params, cli_args = self.compile_task_profile(profile_name, "bench", overrides)
+        binary, params, cli_args = self.backend.compile_task(self, profile_name, "bench", overrides)
         effective_binary = str(Path(binary).expanduser().resolve())
         llama_ver = await self.get_llama_version(Path(effective_binary))
         cmd_str = quote_cmd([effective_binary] + cli_args)
@@ -1234,7 +1243,7 @@ class LlamaOrchestrator:
 
     async def run_eval(self, profile_name: str, dataset: str, overrides: dict):
         overrides["f"] = dataset
-        binary, params, cli_args = self.compile_task_profile(profile_name, "eval", overrides)
+        binary, params, cli_args = self.backend.compile_task(self, profile_name, "eval", overrides)
         effective_binary = str(Path(binary).expanduser().resolve())
         llama_ver = await self.get_llama_version(Path(effective_binary))
         cmd_str = quote_cmd([effective_binary] + cli_args)
@@ -1479,7 +1488,10 @@ async def proxy_to_llama(path: str, request: Request):
         k: v for k, v in request.headers.items()
         if k.lower() not in {"host", "content-length", "transfer-encoding"}
     }
-    target_url = f"http://127.0.0.1:{orchestrator._proxy_target_port}/v1/{path}"
+    # Use the backend's HTTP endpoint seam; S00 mocks have no backend attribute.
+    # This is still *only* the legacy managed llama.cpp route, never an attach.
+    backend = getattr(orchestrator, "backend", LEGACY_LLAMA_BACKEND)
+    target_url = backend.legacy_endpoint(orchestrator._proxy_target_port).v1_url(path)
     start = time.monotonic()
 
     stats: dict[str, Any] = {
@@ -1772,10 +1784,10 @@ def main():
 
         if args.compile_only:
             if args.ensemble:
-                binary, compiled_params, cli_args = orchestrator.compile_serve_ensemble(args.ensemble, overrides)
+                binary, compiled_params, cli_args = orchestrator.backend.compile_ensemble(orchestrator, args.ensemble, overrides)
                 print(f"[OK] Preset written: {compiled_params['preset_path']}")
             else:
-                binary, compiled_params, cli_args = orchestrator.compile_serve_profile(args.profile, overrides)
+                binary, compiled_params, cli_args = orchestrator.backend.compile_profile(orchestrator, args.profile, overrides)
                 print(f"[OK] Profile compiled: {args.profile}")
             print(quote_cmd([binary] + cli_args))
             return
