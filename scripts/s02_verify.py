@@ -87,6 +87,11 @@ def auth_fixture(folder: Path) -> dict[str, str]:
 def check_command(command: list[str], instance: str) -> None:
     require(isinstance(command, list) and all(isinstance(x, str) and x for x in command),
             "Saved start command must be a non-empty argv list.")
+    executable = Path(command[0]).name.lower()
+    require(executable.startswith("python") and
+            (executable.endswith(".exe") if os.name == "nt"
+             else executable.rstrip("0123456789.") == "python"),
+            "Only a directly observed Python interpreter may be started.")
     scripts = [x for x in command if Path(x).name.lower() == "dispatcher.py"]
     require(len(scripts) == 1, "Expected exactly one Dispatcher Python script.")
     expected = (ROOT / "src" / "dispatcher.py").resolve()
