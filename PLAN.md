@@ -36,6 +36,7 @@ See [docs/runtime-ownership-contract.md](docs/runtime-ownership-contract.md) for
 ## 3. Invariants / acceptance policy
 
 - **Owner-gated development**: one scoped issue → tests and PR → owner's local smoke testing and explicit approval → merge → next dependent gate. Keep a working `main`, rollback path, and independent instance migrations.
+- **Readable commit history**: PR titles describe a user-visible outcome in clear, short language. Keep technical implementation details in PR bodies and commit details. Repository setting **Settings → General → Pull Requests → Allow squash merging → Default commit message → Pull request title** makes the squash title equal the reviewed PR title.
 - **Do not break Speedy**: leave direct Caddy `/strata/v1` diagnostic route operational until Dispatcher `/v1` is authenticated and validated from Goose and Open WebUI; preserve current 131072 context, image/vision, runtime options and calibration.
 - **Client identity before cutover**: distinct revocable credentials for Goose and Open WebUI; verify Caddy trust boundary, no attribution based solely on User-Agent or untrusted headers. No secrets/prompts/responses in Git, JSON plans, metrics or ordinary logs.
 - **Observed vs declared**: maintain four facts separately: client request, Dispatcher policy, exact forwarded request, engine-observed behavior. Unknown remains unknown. Attached runs must never be recorded as Dispatcher-launched.
