@@ -61,7 +61,7 @@ class OwnerRunnerTests(unittest.TestCase):
                 self.assertEqual(security.authenticate("Bearer " + token).client_id, identity)
 
     def test_refuses_unrelated_or_cross_instance_process_command(self):
-        correct = ["uv", "run", "python", "src/dispatcher.py", "serve",
+        correct = [sys.executable, "src/dispatcher.py", "serve",
                    "--ensemble", "test", "--instance", "Laptop_Win"]
         runner.check_command(correct, "Laptop_Win")
         for command in (
