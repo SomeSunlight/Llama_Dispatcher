@@ -208,15 +208,22 @@ def unit_tests() -> None:
     print(f"  Unit tests: PASS ({count.group(1) if count else '?'} tests)")
 
 
-def wait_for_server(url: str, proc: subprocess.Popen, timeout: int = 90) -> None:
+def wait_for_server(url: str, proc: subprocess.Popen, token: str,
+                    timeout: int = 300) -> None:
+    """Wait for a real configured model, not merely the open HTTP listener."""
     until = time.monotonic() + timeout
     while time.monotonic() < until:
         if proc.poll() is not None:
             raise CheckError("Test Dispatcher exited during startup; inspect its local process log.")
         if is_listening(url):
-            return
-        time.sleep(0.5)
-    raise CheckError("Dispatcher startup timed out (90s); check model startup/log.")
+            try:
+                status, data = http_json(url, "/v1/models", token, timeout=3)
+                if status == 200 and data.get("data"):
+                    return
+            except (CheckError, ValueError):
+                pass
+        time.sleep(1)
+    raise CheckError("Dispatcher did not report a ready model within startup timeout.")
 
 
 def backup_old_database(instance: str) -> None:
@@ -281,6 +288,8 @@ def main() -> int:
         endpoint(url)
         print(f"S02 verification: {args.instance} (local Dispatcher, not Strata)")
         unit_tests()
+        require(args.start or not args.inference,
+                "--inference requires --start to verify both temporary clients.")
         if args.start:
             command = config["start_command"]
             require(command is not None, "Set start_command in the top config block first.")
@@ -300,7 +309,7 @@ def main() -> int:
                             creationflags=subprocess.CREATE_NEW_PROCESS_GROUP if os.name == "nt" else 0,
                             start_new_session=os.name != "nt")
                     try:
-                        wait_for_server(url, proc)
+                        wait_for_server(url, proc, tokens["goose"])
                         verify_identity(url, tokens, args.inference)
                         if args.inference:
                             verify_sqlite(args.instance, require_clients=True)
