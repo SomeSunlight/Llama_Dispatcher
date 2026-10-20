@@ -31,7 +31,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 from s00_provenance import find_launch, ProvenanceError  # noqa: E402
 
-_INSTANCE_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9_-]{0,63}\\Z")
+_INSTANCE_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9_-]{0,63}$")
 DEFAULT_URL = "http://127.0.0.1:8001"
 
 
@@ -86,19 +86,101 @@ def auth_fixture(folder: Path) -> dict[str, str]:
 
 def check_command(command: list[str], instance: str) -> None:
     require(isinstance(command, list) and all(isinstance(x, str) and x for x in command),
-            "start_command must be a non-empty argv list, not a shell command.")
-    require("src/dispatcher.py" in [x.replace("\\", "/") for x in command],
-            "Only the repository's src/dispatcher.py is accepted for auto-start.")
+            "Saved start command must be a non-empty argv list.")
+    scripts = [x for x in command if Path(x).name.lower() == "dispatcher.py"]
+    require(len(scripts) == 1, "Expected exactly one Dispatcher Python script.")
+    expected = (ROOT / "src" / "dispatcher.py").resolve()
+    observed = Path(scripts[0])
+    if not observed.is_absolute():
+        observed = ROOT / observed
+    require(observed.resolve() == expected,
+            "Captured command references a different Dispatcher checkout.")
     require("serve" in command, "Only a test Dispatcher 'serve' command is allowed.")
     require("--instance" in command and command[command.index("--instance")+1:
                                               command.index("--instance")+2] == [instance],
             "The start command must explicitly select the same --instance.")
     require("--ensemble" in command or "--profile" in command,
-            "Specify your EXISTING --ensemble or --profile.")
-    require(not any(part in command for part in ("--launch-command", "--rebaseline")),
-            "Startup must not suppress provenance checks.")
+            "Expected your existing --ensemble or --profile.")
+    forbidden = {"--launch-command", "--rebaseline", "--api-key", "--password",
+                 "--client-secret", "--auth-token", "--token", "--secret"}
+    require(not any(x.split("=")[0] in forbidden for x in command),
+            "Refusing to save startup commands with secret-bearing flags.")
     require(not any("strata" in part.lower() or "caddy" in part.lower()
                     for part in command), "Never start Strata/Caddy from S02 runner.")
+
+
+def launch_file(instance: str) -> Path:
+    require(bool(_INSTANCE_RE.fullmatch(instance)), "Invalid instance name.")
+    return ROOT / "reports" / f"s02-{instance}.launch.json"
+
+
+def split_captured_command(captured: dict) -> list[str]:
+    """Return executable/argv without a shell. Windows uses native argv rules."""
+    if "argv" in captured:
+        return list(captured["argv"])
+    require(os.name == "nt" and isinstance(captured.get("command"), str),
+            "The operating system did not provide executable arguments.")
+    import ctypes
+    from ctypes import wintypes
+
+    shell = ctypes.WinDLL("shell32", use_last_error=True)
+    parse = shell.CommandLineToArgvW
+    parse.argtypes = [wintypes.LPCWSTR, ctypes.POINTER(ctypes.c_int)]
+    parse.restype = ctypes.POINTER(wintypes.LPWSTR)
+    count = ctypes.c_int(0)
+    pointer = parse(captured["command"], ctypes.byref(count))
+    require(bool(pointer), "Could not decode Windows process arguments.")
+    try:
+        return [pointer[i] for i in range(count.value)]
+    finally:
+        kernel = ctypes.WinDLL("kernel32", use_last_error=True)
+        free = kernel.LocalFree
+        free.argtypes = [ctypes.c_void_p]
+        free.restype = ctypes.c_void_p
+        free(ctypes.cast(pointer, ctypes.c_void_p))
+
+
+def save_start(instance: str, url: str) -> None:
+    """Explicitly store the already running *local* Python invocation."""
+    require(is_listening(url), "Start your existing test Dispatcher first.")
+    _, port = endpoint(url)
+    try:
+        captured = find_launch(instance, proxy_port=port)
+    except ProvenanceError as exc:
+        raise CheckError(str(exc)) from None
+    require(captured.get("capture") != "user_declared_unverified",
+            "A verified OS process command is required.")
+    command = split_captured_command(captured)
+    check_command(command, instance)
+    dest = launch_file(instance)
+    dest.parent.mkdir(exist_ok=True)
+    manifest = {
+        "schema": "s02-test-start-v1", "instance": instance, "url": url,
+        "argv": command, "captured_utc": datetime.now(timezone.utc).isoformat(),
+    }
+    fd = os.open(dest, os.O_CREAT | os.O_TRUNC | os.O_WRONLY, 0o600)
+    with os.fdopen(fd, "w", encoding="utf-8") as stream:
+        json.dump(manifest, stream, indent=2, ensure_ascii=False)
+        stream.write("\n")
+    print(f"  Startup saved locally: {dest.name}")
+    print("  No process was started or stopped. Stop your test Dispatcher before --start.")
+
+
+def load_start(instance: str, url: str) -> list[str]:
+    dest = launch_file(instance)
+    require(dest.is_file(),
+            "No saved start command. While your test Dispatcher is running, "
+            "execute --save-start once; then stop it and run --start.")
+    try:
+        data = json.loads(dest.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as exc:
+        raise CheckError("Saved start command is unreadable or invalid.") from exc
+    require(data.get("schema") == "s02-test-start-v1"
+            and data.get("instance") == instance and data.get("url") == url,
+            "Saved startup manifest does not match this instance and local URL.")
+    command = data.get("argv")
+    check_command(command, instance)
+    return command
 
 
 def http_json(url: str, route: str, token: str | None = None,
