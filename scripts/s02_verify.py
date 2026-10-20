@@ -1,8 +1,10 @@
-"""S02: one-command, owner-safe verification of client identities.
+"""S02: one reusable test runner, host-specific launch captured separately.
 
-Edit the CONFIG block once per host. No real Goose/Open WebUI/Strata needed.
-Default mode NEVER starts/stops a process. Optional isolated mode launches ONLY
-a specifically configured llama.cpp test Dispatcher on a free loopback port.
+No real Goose/Open WebUI/Strata needed. A running local Dispatcher can be
+inspected without changes. With --save-start, an owner intentionally records its
+observed OS process argv into an ignored, local reports/s02-*.launch.json.
+--start can then run ONLY this previously captured, explicitly selected
+test Dispatcher; it never takes over an existing listener.
 """
 from __future__ import annotations
 
@@ -26,24 +28,12 @@ from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "scripts"))
+from s00_provenance import find_launch, ProvenanceError  # noqa: E402
 
-# =========== USER CONFIGURATION: CHANGE ONLY THIS BLOCK =====================
-# Run with: uv run --frozen python scripts/s02_verify.py --instance Laptop_Win
-# start_command=None: inspect your ALREADY running local Dispatcher; no stops.
-# To activate the fully automatic, isolated authenticated end-to-end stage,
-# set the list to your EXISTING laptop llama.cpp startup argv, then add --start.
-# Never configure a productive Speedy Strata/Caddy process as start_command.
-MACHINES = {
-    "Laptop_Win": {"url": "http://127.0.0.1:8001", "start_command": None},
-    "Laptop_WSL": {"url": "http://127.0.0.1:8001", "start_command": None},
-    "Speedy_Win": {"url": "http://127.0.0.1:8001", "start_command": None},
-    "Speedy_WSL": {"url": "http://127.0.0.1:8001", "start_command": None},
-}
-# Optional isolated start_command example (one argv element per quoted string):
-# ["uv", "run", "--frozen", "python", "src/dispatcher.py", "serve",
-#  "--ensemble", "YOUR_EXISTING_ENSEMBLE", "--instance", "Laptop_Win",
-#  "--model-root", r"C:\\YOUR_EXISTING_MODEL_ROOT", "--bin-dir", r"C:\\YOUR_BIN_DIR"]
-# ===========================================================================
+_INSTANCE_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9_-]{0,63}\\Z")
+DEFAULT_URL = "http://127.0.0.1:8001"
+
 
 
 class CheckError(RuntimeError):
