@@ -1,4 +1,5 @@
 """S02: opt-in authentication, per-client policy and private audit boundaries."""
+import gc
 import hashlib
 import json
 import sqlite3
@@ -6,6 +7,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from contextlib import closing
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
@@ -253,7 +255,7 @@ class ProxyAndSchemaTests(unittest.IsolatedAsyncioTestCase):
                 duration=0.1, ttft=None, status_code=200,
                 client_id="goose", policy_mode="enforce",
             )
-            with sqlite3.connect(path) as con:
+            with closing(sqlite3.connect(path)) as con:
                 self.assertEqual(con.execute("PRAGMA user_version").fetchone()[0], 9)
                 self.assertEqual(con.execute(
                     "SELECT client_id,policy_mode FROM metrics_proxy_requests ORDER BY id"
@@ -263,3 +265,6 @@ class ProxyAndSchemaTests(unittest.IsolatedAsyncioTestCase):
                     "ORDER BY id DESC LIMIT 1"
                 ).fetchone(), ("goose", "enforce"))
             MetricsDatabase(path, ROOT / "src" / "init_db.sql")  # idempotent
+            # sqlite3 connection context managers do not close handles. Windows
+            # keeps the temporary DB locked until internal handles are collected.
+            gc.collect()
