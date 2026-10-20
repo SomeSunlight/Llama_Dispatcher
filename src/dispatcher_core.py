@@ -1393,23 +1393,33 @@ def _extract_thinking(req_data: dict) -> int | None:
     return None
 
 
-_REQUEST_CONTENT_KEYS = {
+# Explicit allowlist: unknown request fields may contain private tool arguments,
+# images, files or messages. Forward them unchanged but NEVER persist their values.
+_SAFE_PARAMETER_KEYS = frozenset({
+    "model", "stream", "temperature", "top_p", "top_k", "min_p",
+    "max_tokens", "max_completion_tokens", "n", "seed", "stop",
+    "presence_penalty", "frequency_penalty", "repeat_penalty",
+    "reasoning_effort", "thinking_budget", "stream_options",
+    "mirostat", "mirostat_tau", "mirostat_eta", "typical_p", "min_keep",
+})
+_REQUEST_CONTENT_KEYS = frozenset({
     "messages", "prompt", "input", "tools", "tool_calls", "functions", "documents",
     "audio", "image", "images", "file", "files",
-}
-_PRIVATE_PARAMETER_KEYS = {
-    "authorization", "api_key", "token", "password", "secret", "credentials",
-    "cookie", "headers", "client_secret",
-}
+})
 
 
 def _request_params_snapshot(req_data: dict[str, Any]) -> dict[str, Any]:
-    """Store control metadata, never content, tool definitions or credentials."""
-    return {
-        k: v for k, v in req_data.items()
-        if k.lower() not in _REQUEST_CONTENT_KEYS
-        and not any(term in k.lower() for term in _PRIVATE_PARAMETER_KEYS)
-    }
+    """Store only known-safe controls, not prompt, tool or unknown extension data."""
+    safe = {k: v for k, v in req_data.items()
+            if k in _SAFE_PARAMETER_KEYS and not isinstance(v, (dict, list))}
+    ctk = req_data.get("chat_template_kwargs")
+    if isinstance(ctk, dict):
+        safe_ctk = {k: v for k, v in ctk.items()
+                    if k in ("enable_thinking", "thinking_budget", "reasoning_effort")
+                    and isinstance(v, (bool, int, float, str))}
+        if safe_ctk:
+            safe["chat_template_kwargs"] = safe_ctk
+    return safe
 
 
 def _parameter_changes(
