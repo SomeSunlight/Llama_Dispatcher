@@ -1,5 +1,8 @@
 # S02 — Client identity and explicit request policies
 
+**Für den eigentlichen Test zuerst nur [S02-SCHNELLTEST.md](S02-SCHNELLTEST.md) lesen.**
+Der folgende Text ist technische Hintergrunddokumentation, keine Pflichtlektüre.
+
 **Owner-gated review:** [Issue #10](https://github.com/SomeSunlight/Llama_Dispatcher/issues/10).
 Prerequisite S01 accepted in [PR #22](https://github.com/SomeSunlight/Llama_Dispatcher/pull/22).
 S03/Strata attach is **not implemented**. No change to productive Speedy Strata/Caddy.
