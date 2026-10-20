@@ -28,7 +28,36 @@ The new `tests/test_s01_backend_contract.py` exercises capabilities, dynamic com
 
 ## Owner local smoke tests — separate from productive Strata
 
-On an existing **running** llama.cpp Dispatcher with your instance-specific startup command unchanged:
+**First restart the nonproductive llama.cpp test Dispatcher from this PR checkout**
+using its *same previously approved* instance-specific startup command. A Git
+checkout does not hot-reload Python: an already running process may still serve
+the old `main` code. S00 records the Git revision of the **checkout at test
+time**, not the revision loaded inside an already-running Python process.
+
+The S00 original pinned `core_commit` will intentionally differ on PR #22.
+Do **not** rebaseline the accepted S00 historical snapshot merely to make a PR
+check green. Instead, use a **separate report directory outside the Git repo**
+(e.g. in Windows PowerShell):
+
+```powershell
+$report = Join-Path $env:TEMP 'Llama_Dispatcher_S01\\smoke.json'
+uv run --frozen python scripts/s00_verify.py --instance Laptop_Win --report $report
+```
+
+The runner creates the parent directory and pins a separate `s00-Laptop_Win.baseline.json`
+there. The original repo `reports/s00-Laptop_Win.baseline.json` remains intact.
+Keep the temporary report private: the new baseline contains the observed
+absolute process command, local paths, and could contain CLI secrets. On other
+hosts use their actual instance names. The runner's successful HTTP smoke
+is meaningful for the **S01 code** only after the Dispatcher process has
+actually been restarted from this checkout.
+
+Alternatively, after consciously accepting a *new* ongoing core baseline,
+`--rebaseline` archives the original timestamped manifest; it should not
+be used simply to suppress this expected PR commit mismatch.
+
+For a running test dispatcher, the normal S00 command below only passes
+without `--report` after a fresh baseline is accepted in the default report directory:
 
 ```bash
 uv run --frozen python scripts/s00_verify.py --instance Laptop_WSL
