@@ -78,7 +78,7 @@ class DatabaseCharacterization(unittest.TestCase):
             serve = con.execute(
                 "SELECT llama_binary,runtime_instance_id,prompt_tokens,gen_tokens "
                 "FROM v_serve_telemetry").fetchone()
-        self.assertEqual(version, 8)
+        self.assertEqual(version, 9)
         self.assertIn("metrics_proxy_requests", tables)
         self.assertNotIn("proxy_requests", tables)
         self.assertEqual(run[:2], ("synthetic-win", "/synthetic/llama-server"))
@@ -133,7 +133,7 @@ class DatabaseCharacterization(unittest.TestCase):
                 "FROM metrics_proxy_requests WHERE id=1"
             ).fetchone()
             version = con.execute("PRAGMA user_version").fetchone()[0]
-        self.assertEqual(version, 8)
+        self.assertEqual(version, 9)
         self.assertEqual(run, ("unknown", None))
         self.assertEqual(row[:3], ("base", 0.2, 0))
         self.assertEqual(row[3:], (None, None, None, None, None))
