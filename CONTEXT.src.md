@@ -11,9 +11,9 @@
 ## Sources
 
 <!-- contextcanon-placement-sources:start -->
-- [ContextCanon Foundation](contextcanon.yaml) — `0.2.0-draft`
-  Why: Reuse the same proven workflow as for context-canon itself, which is a similar LLM-assisted project.
-  <!-- ctx:source id="4ca9d92c-59f2-4b1f-b7b3-0e2ff91fd001" version="0.2.0-draft" normalized-digest="62a1bc6b9fffa838fbdf2b434f9fd2057de38fb6017734115ae2fb3ed56c100e" package-digest="7da87dcee0e716db35b62935f9980d27dd06986af93e61d4d28eb59783a58b8c" -->
+- [GitHub](contextcanon.yaml) — `0.1.8-draft`
+  Why: Use the GitHub provider for the project's github.com development workflow; it inherits Development Workflow without unrelated ContextCanon Foundation governance.
+  <!-- ctx:source id="ccf4d7ee-4db1-4110-9ddc-5d70c69cf2bc" version="0.1.8-draft" -->
 <!-- contextcanon-placement-sources:end -->
 
 ## Local Rules
