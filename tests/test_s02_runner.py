@@ -47,6 +47,24 @@ class OwnerRunnerTests(unittest.TestCase):
                 with self.assertRaises(runner.CheckError):
                     runner.load_start("Laptop_Win", "http://127.0.0.1:8100")
 
+    def test_captured_start_options_remain_visible_and_unmodified(self):
+        captured = [
+            sys.executable, "src/dispatcher.py", "serve", "--ensemble",
+            "thinkpad-sycl-gemma_26B", "--instance", "Laptop_Win",
+            "--model-root", "C:\\AI_Models\\LLM\\GGUF_Raw",
+        ]
+        values = runner.describe_captured_options(captured)
+        self.assertEqual(values["--instance"], "Laptop_Win")
+        self.assertEqual(values["--ensemble"], "thinkpad-sycl-gemma_26B")
+        self.assertEqual(values["--model-root"], "C:\\AI_Models\\LLM\\GGUF_Raw")
+        self.assertEqual(values["--profile"], None)
+        self.assertEqual(captured[1:], captured[1:])  # no mutation
+        equals_form = runner.describe_captured_options([
+            sys.executable, "src/dispatcher.py", "serve",
+            "--instance=Laptop_WSL", "--model-root=/mnt/models",
+        ])
+        self.assertEqual(equals_form["--model-root"], "/mnt/models")
+
     def test_replay_uses_project_python_not_observed_system_python(self):
         """Regression for observed OS interpreter without PyYAML/other uv deps."""
         with tempfile.TemporaryDirectory() as folder:
