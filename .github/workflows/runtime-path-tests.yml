@@ -29,6 +29,9 @@ jobs:
       - name: Verify generated ContextCanon output
         if: runner.os == 'Linux'
         run: |
-          uvx --from git+https://github.com/SomeSunlight/context-canon.git@4f007eb9a2596a905cd716e2bbefe2351cd4ecdf contextcanon build .
-          uvx --from git+https://github.com/SomeSunlight/context-canon.git@4f007eb9a2596a905cd716e2bbefe2351cd4ecdf contextcanon check .
+          # Use the compiler for the accepted ContextCanon v0.8 package format.
+          # The Parent is already adopted and committed: CI must not re-adopt or propagate it.
+          uvx --from git+https://github.com/SomeSunlight/context-canon.git@812d03d25e2f92e995103ebfb82f5f9ae9c67995 contextcanon build --all .
+          uvx --from git+https://github.com/SomeSunlight/context-canon.git@812d03d25e2f92e995103ebfb82f5f9ae9c67995 contextcanon check --all .
           git diff --exit-code
+          test -z "$(git ls-files --others --exclude-standard)"
