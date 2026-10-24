@@ -228,7 +228,10 @@ def replay_with_test_python(captured: list[str], instance: str) -> list[str]:
     script and flags verbatim, changing ONLY the interpreter executable.
     """
     check_command(captured, instance)
-    current = Path(sys.executable).resolve()
+    # IMPORTANT: keep sys.executable verbatim. On Linux/WSL the venv Python
+    # may be a symlink to the base interpreter. Path.resolve() follows that
+    # symlink and would silently remove venv site-packages from the subprocess.
+    current = Path(sys.executable)
     require(current.is_file(), "The current test Python interpreter is missing.")
     return [str(current), *captured[1:]]
 
