@@ -9,4 +9,6 @@ Start with [**CONTEXT.md**](CONTEXT.md): it is the generated Official Context th
 
 Edit [**CONTEXT.src.md**](CONTEXT.src.md) for this Node's local authored context. `Local` means authored here; inherited Rule overrides/removals are explicit separate Changes.
 
+See [**CONTEXT-format.md**](CONTEXT-format.md) for the source syntax and examples of adding Rules, Topics and Resources. Build refreshes source-only authoring help and supplies missing IDs for valid new entries.
+
 ContextCanon project and documentation: https://github.com/SomeSunlight/context-canon

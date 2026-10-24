@@ -1,0 +1,15 @@
+{
+  "resources": [
+    {
+      "node_id": "c4c94726-3cc7-4df6-b779-72bbf9c06f40",
+      "path": "CONTEXT/references/ne68be75ed7bf392/docs/change-workflow.md",
+      "repo_path": "nodes/library/development-workflow/docs/change-workflow.md"
+    },
+    {
+      "node_id": "c4c94726-3cc7-4df6-b779-72bbf9c06f40",
+      "path": "CONTEXT/references/ne68be75ed7bf392/docs/version-provenance-python.md",
+      "repo_path": "nodes/library/development-workflow/docs/version-provenance-python.md"
+    }
+  ],
+  "schema": "contextcanon/resource-origins/v1"
+}

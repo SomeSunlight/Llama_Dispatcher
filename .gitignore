@@ -43,3 +43,11 @@ contextcanon-onboarding/
 # Disposable S02 manual test identities (contains private raw test tokens)
 /reports/s02-*.manual-clients.json
 /reports/s02-*.manual-secrets.json
+
+# >>> ContextCanon candidate scratch (managed)
+**/.context/candidates/
+**/.context/parent-candidates/
+**/.context/source-reviews/
+**/.context/parent-reviews/
+**/.context/migration-trash/
+# <<< ContextCanon candidate scratch (managed)

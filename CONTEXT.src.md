@@ -1,22 +1,49 @@
 # Llama Dispatcher — Local Context Source
-<!-- ctx:node id="e3e6391b-6eb7-4b2a-ba1d-f969a65bbf08" name="Llama Dispatcher" version="0.1.1-draft" -->
+<!-- ctx:node id="e3e6391b-6eb7-4b2a-ba1d-f969a65bbf08" name="Llama Dispatcher" version="0.1.3-draft" -->
+
+<!-- contextcanon:format Node
+Format: Node metadata follows the # title: ctx:node id="..." name="..." version="...". Preserve existing identity.
+Details: CONTEXT-format.md
+-->
+
+<!-- contextcanon:source-help:intro:start -->
+Edit this local Context source; ContextCanon generates CONTEXT.md from it.
+Some sections use a strict syntax. The comments below show the expected format.
+New Rules, Topics and Resources receive IDs automatically during build; preserve existing IDs.
+See [the source format guide](CONTEXT-format.md) for examples and editing instructions.
+<!-- contextcanon:source-help:intro:end -->
+
+## Context Imports
+
+<!-- contextcanon:format Context Imports
+Format: - [Name](location) — `version` — `relationship=parent|reference`; optional indented Why:, then ctx:source metadata. Preserve exact pins; use source list/adopt/update for package identity.
+Details: CONTEXT-format.md
+-->
+
+<!-- contextcanon-placement-sources:start -->
+<!-- contextcanon-placement-sources:end -->
+
+- [GitHub](contextcanon.yaml) — `0.1.8-draft` — `relationship=parent`
+  <!-- ctx:source id="ccf4d7ee-4db1-4110-9ddc-5d70c69cf2bc" version="0.1.8-draft" normalized-digest="3efd3dfdfec720e048fb84df4db4f0d1ed86f1a9f5486314a482789c1bd2850b" package-digest="3e0883cbf8e963f29c028af8a73bcbe87123d7328b5b797c273d4faa38d5e3b9" -->
 
 ## Local Overview
 
+<!-- contextcanon:format Local Overview
+Format: Ordinary Markdown orientation, local to this Node. Any existing placement identity follows its paragraph/item; do not change it.
+Details: CONTEXT-format.md
+-->
+
 <!-- contextcanon-placement-overview:start -->
-<!-- cc:placement-overview id="ONB-40902CFCE27F" -->
 - Llama Dispatcher is an asynchronous orchestrator and OpenAI-compatible proxy for llama.cpp.
+  <!-- cc:placement-overview id="ONB-40902CFCE27F" -->
 <!-- contextcanon-placement-overview:end -->
 
-## Sources
-
-<!-- contextcanon-placement-sources:start -->
-- [ContextCanon Foundation](contextcanon.yaml) — `0.2.0-draft`
-  Why: Reuse the same proven workflow as for context-canon itself, which is a similar LLM-assisted project.
-  <!-- ctx:source id="4ca9d92c-59f2-4b1f-b7b3-0e2ff91fd001" version="0.2.0-draft" normalized-digest="62a1bc6b9fffa838fbdf2b434f9fd2057de38fb6017734115ae2fb3ed56c100e" package-digest="7da87dcee0e716db35b62935f9980d27dd06986af93e61d4d28eb59783a58b8c" -->
-<!-- contextcanon-placement-sources:end -->
-
 ## Local Rules
+
+<!-- contextcanon:format Local Rules
+Format: ### Group, then - **Title:** Statement, then indented Why: Rationale. build adds a missing ctx:rule ID after the entry; preserve existing IDs.
+Details: CONTEXT-format.md
+-->
 
 <!-- contextcanon-placement-rules:start -->
 ### Onboarding placement

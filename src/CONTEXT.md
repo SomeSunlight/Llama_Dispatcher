@@ -8,70 +8,68 @@
 > Edit [CONTEXT.src.md](CONTEXT.src.md) instead.
 
 **Node:** Dispatcher Code  
-**Context version:** `0.1.0-draft`
-
-**Parent Context Node:** [Llama Dispatcher](.context/sources/ec8ca549a9905b2361cef49ad86774c4889381725f7815044ea4a82a361bfc6e/CONTEXT.md) — `0.1.0-draft`  
-**Accepted Parent package:** `ec8ca549a9905b2361cef49ad86774c4889381725f7815044ea4a82a361bfc6e`
+**Context version:** `0.1.2-draft`
 
 **Resulting imported Contexts:**
 
-- **ContextCanon Foundation** — `0.2.0-draft` — via Parent Context Node **Llama Dispatcher** — Why: Reuse the same proven workflow as for context-canon itself, which is a similar LLM-assisted project. — [inspect accepted carrier](.context/sources/ec8ca549a9905b2361cef49ad86774c4889381725f7815044ea4a82a361bfc6e/CONTEXT.md)
-- **Llama Dispatcher** — `0.1.0-draft` — direct Parent Context Node — [inspect accepted carrier](.context/sources/ec8ca549a9905b2361cef49ad86774c4889381725f7815044ea4a82a361bfc6e/CONTEXT.md)
+- **Development Workflow** — `0.3.7-draft` — via Parent Context **Llama Dispatcher** — [inspect accepted carrier](../.context/versions/bf00e68a8ca381fd/CONTEXT.md)
+- **GitHub** — `0.1.8-draft` — via Parent Context **Llama Dispatcher** — [inspect accepted carrier](../.context/versions/bf00e68a8ca381fd/CONTEXT.md)
+- **Llama Dispatcher** — `0.1.3-draft` — direct Parent Context — [inspect accepted carrier](../.context/versions/bf00e68a8ca381fd/CONTEXT.md)
 
 ## Local Overview
 
 <!-- contextcanon-placement-overview:start -->
-<!-- cc:placement-overview id="ONB-9434DC39E0AE" -->
 - Dispatcher code compiles profiles and ensembles into llama.cpp parameters, starts llama.cpp, and collects metrics.
+  <!-- cc:placement-overview id="ONB-9434DC39E0AE" -->
 
-<!-- cc:placement-overview id="ONB-52671788E89A" -->
 - The Dispatcher proxy exposes configured model aliases to clients, enforces centrally configured request parameters, and forwards effective requests to llama.cpp.
+  <!-- cc:placement-overview id="ONB-52671788E89A" -->
 
-<!-- cc:placement-overview id="ONB-3AA7204F1FD7" -->
 - A proxy-only alias can target a real llama.cpp alias, rewrite the request model, and apply its own policy while sharing the same loaded model in VRAM.
+  <!-- cc:placement-overview id="ONB-3AA7204F1FD7" -->
 
-<!-- cc:placement-overview id="ONB-19C8A7718A41" -->
 - chat_template_kwargs is injected by the proxy into requests and is not written to the llama.cpp INI.
+  <!-- cc:placement-overview id="ONB-19C8A7718A41" -->
 
-<!-- cc:placement-overview id="ONB-73A34A2AD35A" -->
 - Proxy handling distinguishes the client model alias, the resolved backing profile, and the effective target model sent to llama.cpp.
+  <!-- cc:placement-overview id="ONB-73A34A2AD35A" -->
 
-<!-- cc:placement-overview id="ONB-1F0733D8FD42" -->
 - Ensemble mode starts llama.cpp with the Dispatcher proxy; single-profile mode starts llama.cpp directly from one profile without router INI or proxy aliasing.
+  <!-- cc:placement-overview id="ONB-1F0733D8FD42" -->
 
-<!-- cc:placement-overview id="ONB-5E681FFCD08F" -->
 - An execution_run represents the main process.
+  <!-- cc:placement-overview id="ONB-5E681FFCD08F" -->
 
-<!-- cc:placement-overview id="ONB-C4C94C6CDECA" -->
 - A serve_model_instance represents one effectively loaded model.
+  <!-- cc:placement-overview id="ONB-C4C94C6CDECA" -->
 
-<!-- cc:placement-overview id="ONB-3EA477E1491E" -->
 - metrics_serve refers to both the historical execution run and the specific loaded-model origin.
+  <!-- cc:placement-overview id="ONB-3EA477E1491E" -->
 
-<!-- cc:placement-overview id="ONB-1DCD56E83A83" -->
 - The Dispatcher proxy is the observation point for original client request parameters; llama.cpp sees the already transformed request.
+  <!-- cc:placement-overview id="ONB-1DCD56E83A83" -->
 <!-- contextcanon-placement-overview:end -->
 
 ## Local State
 
 <!-- contextcanon-placement-state:start -->
-<!-- cc:placement-state id="ONB-CCF62CBAA356" -->
 - The current runtime keeps compiled alias policy but not a full provenance tree for each value; it can identify dispatcher_policy plus alias/profile context, not the exact originating configuration layer.
+  <!-- cc:placement-state id="ONB-CCF62CBAA356" -->
 
-<!-- cc:placement-state id="ONB-C4C1FD4D00BE" -->
 - The Dispatcher proxy defaults to port 8001.
+  <!-- cc:placement-state id="ONB-C4C1FD4D00BE" -->
 
-<!-- cc:placement-state id="ONB-C2F8E48BE5EA" -->
 - The internal llama.cpp server defaults to port 8081.
+  <!-- cc:placement-state id="ONB-C2F8E48BE5EA" -->
 
-<!-- cc:placement-state id="ONB-9F3DE4C4C5D0" -->
 - The Dispatcher proxy currently provides no browser web UI.
+  <!-- cc:placement-state id="ONB-9F3DE4C4C5D0" -->
 
-<!-- cc:placement-unresolved id="ONB-5D4DB3C8503C" -->
 - Open question: Are existing metrics databases upgraded additively, or is there no migration from older versions and the schema is built fresh?
+  <!-- cc:placement-unresolved id="ONB-5D4DB3C8503C" -->
 
-<!-- cc:placement-unresolved id="ONB-0C719E0D5E75" -->
 - Open question: What is the canonical proxy request telemetry table name: metrics_proxy_requests or proxy_requests?
+  <!-- cc:placement-unresolved id="ONB-0C719E0D5E75" -->
 <!-- contextcanon-placement-state:end -->
 
 ## How to use this context
@@ -80,77 +78,85 @@ Apply all Rules below to every task in this Node.
 
 For the current task, evaluate each Topic condition. When one matches, read every **Required** target before continuing; read **Optional** targets only when useful.
 
-## Rules from ContextCanon Foundation
+## Rules from Development Workflow
 
-### Canonical context
+### Recoverable planning
 
-#### `CC-001` — One official package
+#### `CCW-010` — Back every change with an Issue
 
-The compiled Official Context Package is the single canonical context for a Node: it applies to the Node itself and is the package meaning published to child Nodes.
+Before implementation, framework-context, or substantial documentation changes, ensure an Issue records why the change exists; it may be brief.
 
-#### `CC-002` — Edit source, not generated output
+#### `CCW-001` — Plan a coherent change block before editing
 
-Human context changes are authored in `CONTEXT.src.md`; generated context views, package contents, machine state, and harness adapters are not edited directly.
+Before starting a new coherent development block, record a short purpose and checklist in the project's durable planning surface; use `PLAN.md` when the project follows this workflow convention.
 
-### Machine state
+#### `CCW-002` — Checkpoint completed plan items immediately
 
-#### `CC-003` — Keep compiler bookkeeping out of the normal workflow
+When a listed step is actually complete, mark its `PLAN.md` checkbox `[x]` immediately rather than reconstructing completion at the end of a long session.
 
-Framework bookkeeping belongs under `.context/` and should not be required reading for normal human or agent work.
+#### `CCW-003` — Keep recovery-critical knowledge in the repository
 
-### Composition
+Put decisions, active constraints, accepted state, and next steps needed to resume work in repository documentation such as `PLAN.md`, `STATE.md`, or the project's equivalent rather than relying on chat history or model memory.
 
-#### `CC-004` — No implicit Source precedence
+#### `CCW-007` — Resume recent explicit continuation without re-proving unchanged state
 
-Context Sources are composed without implicit precedence; conflicts are resolved explicitly through local changes rather than Source order.
+When the project owner resumes work after a short conversational interruption, explicitly says to continue, and reports no intervening repository changes, continue from the last established branch/PR state unless a repository operation gives evidence that it changed. Do not spend a new work cycle re-checking already established repository facts merely to prove that nothing happened.
 
-#### `CC-013` — Parents are unordered
+### Transparent machine semantics
 
-A Node may compose several semantic Parents. Parent order has no precedence; non-orthogonal conflicts must be resolved explicitly.
+#### `CCW-012` — Mark machine-significant Markdown explicitly
 
-### Identity
+When Markdown is also parsed, compiled, extracted, or otherwise given machine-significant meaning, every field or wording whose value affects machine semantics must live in an explicitly marked machine structure rather than being inferred from ordinary presentation prose. Keep that machine significance recognizable in rendered and review surfaces; rendering may style or summarize the control structure, but must not make the machine/human boundary indistinguishable.
 
-#### `CC-005` — Stable identity
+#### `CCW-015` — Render repository-local Markdown links URL-safely
 
-Every addressable context element has a stable ID independent of its title, wording, file location, and presentation.
+When writing Markdown links to repository-local files or directories, keep the real filesystem path as the semantic source of truth but percent-encode the Markdown link destination as a URI path instead of embedding raw spaces or Markdown/URL-sensitive path characters.
 
-#### `CC-006` — Publish IDs that children may reference
+### Proportional verification
 
-Published official contexts expose stable IDs for Rules and other elements that child Nodes may reference.
+#### `CCW-004` — Batch related edits before expensive final verification
 
-### Progressive disclosure
+For one coherent correction block, make the related authoring/code changes and run proportionate focused checks first; do not repeat the project's most expensive generated-output, integration, packaging, or full verification cycle after every micro-edit.
 
-#### `CC-007` — Keep entry context small
+#### `CCW-009` — Use owner-approved Fast Track blocks without weakening the final gate
 
-Keep the official entry context compact and use Topics to load deeper context only when needed; Topic targets distinguish Required from Optional material.
+When the project owner explicitly approves a coherent implementation scope and says intermediate product review is unnecessary, mark the Fast Track as active in the durable PLAN with its scope and exit condition, keep recovery checkpoints and focused verification inside bounded work blocks, and defer repeated PR-description polish, full CI, generated-output regeneration, and other review ceremony until the coherent review candidate. When the Fast Track ends, record that closure before returning to ordinary review cadence.
 
-### Project state
+#### `CCW-005` — Require exact-head green verification at the merge gate, not the first review gate
 
-#### `CC-008` — State stays local
+A coherent development block may be presented for project-owner review while understood and disclosed CI failures or generated drift remain. After explicit project-owner approval and before merging, require the exact current head to pass the project's complete merge-gate verification, including zero generated drift when generated canonical output is part of the project contract.
 
-`STATE.md` describes the current local project situation and is never inherited as governance by child Nodes.
+#### `CCW-013` — Prefer editable installs for repeated owner testing
 
-### Harness independence
+When actively testing an installable Python tool from a development checkout, prefer one editable install (`uv tool install --editable .`) and pull subsequent revisions with Git rather than reinstalling each version, when the environment supports it.
 
-#### `CC-009` — Canonical context is model- and harness-neutral
+#### `CCW-014` — Expose development provenance without micro-bumping releases
 
-Project code and canonical project context must not depend on a particular LLM or agent harness; harness-specific files are thin generated adapters at the edge.
+When an executable tool is tested from a changing Git checkout, keep its release version stable until a real release/version boundary, but make runtime version output identify the current VCS state with the branch/ref when available, commit identity, and dirty state. Treat the commit identity as authoritative and the branch/ref as human orientation; release artifacts without checkout metadata still report the canonical release version.
 
-### Repository conventions
+### Human review gate
 
-#### `CC-012` — Align Node roots with governed files
+#### `CCW-011` — Expand change scope explicitly
 
-Prefer Node roots that contain the files they primarily govern; keep the existing directory structure when it already fits.
+Applicable Context constrains a task; it does not silently expand its writable scope.
 
-#### `CC-010` — Keep familiar repository documents useful
+#### `CCW-006` — Do not merge without explicit project-owner approval
 
-Keep `README.md`, `CONTRIBUTING.md`, and `CHANGELOG.md` present when they are useful to the repository even when ContextCanon is present.
+Keep a review PR or equivalent change set open until the project owner explicitly approves the reviewed result.
 
-### Documentation style
+### Accepted baseline
 
-#### `CC-011` — Write for intelligent readers
+#### `CCW-008` — Close the post-merge baseline checkpoint before new development
 
-Write technical documentation in precise, plain prose for intelligent readers; introduce unfamiliar concepts before using specialized terms and avoid unexplained internal shorthand, inflated marketing language, and unnecessary jargon.
+After a reviewed change is successfully merged into the accepted branch, reconcile the durable repository state that records the accepted baseline before starting the next coherent development block. Record the merge outcome in `PLAN.md`, update `STATE.md` or equivalent current-state documentation, and refresh README/CHANGELOG or review-status wording made stale by the merge when applicable.
+
+## Rules from GitHub
+
+### Development infrastructure
+
+#### `GH-001` — Use GitHub development objects
+
+Manage workflow Issues, Pull Requests, reviews, checks/CI status, and merge state in the project's GitHub repository. Branches and commits remain ordinary Git objects; when a capable local harness is available, edit and test the local working tree directly rather than treating GitHub file APIs as a substitute filesystem.
 
 ## Rules from Llama Dispatcher
 
@@ -158,7 +164,7 @@ Write technical documentation in precise, plain prose for intelligent readers; i
 
 #### `ONB-B97F676A25A3` — Keep configuration in its owning layer
 
-Maintain each configuration fact once in the layer that owns it; do not put engine flags in profiles, model paths in engine files, or duplicate model sampling defaults.
+Maintain each configuration fact once in the layer that owns it; do not put engine flags in profiles, model paths in engine files, or duplicate model sampling defaults. Shared instance configuration must not duplicate operating-system-specific runtime paths; launchers should supply machine-local binary and model roots explicitly, with environment variables only as documented optional fallbacks. Backend-specific process environment such as GPU-selection variables belongs in the engine configuration and is applied by Dispatcher when it launches llama.cpp rather than being required in the caller's shell. Instance repositories under `instances/<name>/` are user-owned independent Git repositories: Dispatcher core ignores their contents and must not register or manage them as Git submodules.
 
 #### `ONB-D855038AE157` — Configuration precedence
 
@@ -252,33 +258,23 @@ For schema evolution, avoid destructive updates to existing measurement data, us
 
 Store parameter names in canonical dashed form in the database, but write OpenAI-compatible request JSON keys with underscores when forwarding to llama.cpp.
 
-## Topics from ContextCanon Foundation
+## Topics from Development Workflow
 
-### Context authoring
+### Executing a development block
 
-When editing ContextCanon source, IDs, generated views, package resources, or Topics:
-
-**Required**
-
-- [`CONTEXT/references/4ca9d92c-59f2-4b1f-b7b3-0e2ff91fd001/nodes/library/foundation/docs/official-context.md`](CONTEXT/references/4ca9d92c-59f2-4b1f-b7b3-0e2ff91fd001/nodes/library/foundation/docs/official-context.md)
-- [`CONTEXT/references/4ca9d92c-59f2-4b1f-b7b3-0e2ff91fd001/nodes/library/foundation/docs/source-format.md`](CONTEXT/references/4ca9d92c-59f2-4b1f-b7b3-0e2ff91fd001/nodes/library/foundation/docs/source-format.md)
-- [`CONTEXT/references/4ca9d92c-59f2-4b1f-b7b3-0e2ff91fd001/nodes/library/foundation/docs/topics.md`](CONTEXT/references/4ca9d92c-59f2-4b1f-b7b3-0e2ff91fd001/nodes/library/foundation/docs/topics.md)
-
-### Context composition
-
-When adding Sources or changing inherited Rules:
+When planning, resuming, checkpointing, reviewing, testing, finalizing, merging, or closing the accepted baseline for a coherent development block:
 
 **Required**
 
-- [`CONTEXT/references/4ca9d92c-59f2-4b1f-b7b3-0e2ff91fd001/nodes/library/foundation/docs/composition.md`](CONTEXT/references/4ca9d92c-59f2-4b1f-b7b3-0e2ff91fd001/nodes/library/foundation/docs/composition.md)
+- [`CONTEXT/references/ne68be75ed7bf392/docs/change-workflow.md`](CONTEXT/references/ne68be75ed7bf392/docs/change-workflow.md)
 
-### Harness adapters
+### Implementing executable version identity
 
-When adding or changing a harness-specific entry file:
+When adding or changing `--version`, package version lookup, or Git checkout provenance for an executable Python tool:
 
 **Required**
 
-- [`CONTEXT/references/4ca9d92c-59f2-4b1f-b7b3-0e2ff91fd001/nodes/library/foundation/docs/harnesses.md`](CONTEXT/references/4ca9d92c-59f2-4b1f-b7b3-0e2ff91fd001/nodes/library/foundation/docs/harnesses.md)
+- [`CONTEXT/references/ne68be75ed7bf392/docs/version-provenance-python.md`](CONTEXT/references/ne68be75ed7bf392/docs/version-provenance-python.md)
 
 ## Local Topics
 
@@ -288,4 +284,4 @@ When operating or troubleshooting Dispatcher serve/bench/eval commands, debug en
 
 **Required**
 
-- [`CONTEXT/references/5a5bf4f7-2cdd-4c35-90bb-4195d9759e5a/README.md`](CONTEXT/references/5a5bf4f7-2cdd-4c35-90bb-4195d9759e5a/README.md)
+- [`CONTEXT/references/n7a3bd8b0815855d/README.md`](CONTEXT/references/n7a3bd8b0815855d/README.md)
