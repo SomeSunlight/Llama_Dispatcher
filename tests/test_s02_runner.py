@@ -57,7 +57,7 @@ class OwnerRunnerTests(unittest.TestCase):
                         "example", "--instance", "Laptop_Win"]
             with patch.object(runner, "ROOT", root):
                 replay = runner.replay_with_test_python(captured, "Laptop_Win")
-            self.assertEqual(replay[0], str(Path(sys.executable).resolve()))
+            self.assertEqual(replay[0], sys.executable)
             self.assertEqual(replay[1:], captured[1:])
             self.assertNotEqual(replay[0], captured[0])
             # The interpreter just proven by the test suite must load PyYAML.
