@@ -1,6 +1,7 @@
 """Fast self-tests for the operator-facing S02 runner; no processes started."""
 import importlib.util
 import json
+import os
 import sys
 import tempfile
 import unittest
@@ -53,7 +54,8 @@ class OwnerRunnerTests(unittest.TestCase):
             script = root / "src" / "dispatcher.py"
             script.parent.mkdir()
             script.write_text("import yaml\n", encoding="utf-8")
-            captured = ["python3", str(script), "serve", "--ensemble",
+            captured = ["python.exe" if os.name == "nt" else "python3",
+                        str(script), "serve", "--ensemble",
                         "example", "--instance", "Laptop_Win"]
             with patch.object(runner, "ROOT", root):
                 replay = runner.replay_with_test_python(captured, "Laptop_Win")
