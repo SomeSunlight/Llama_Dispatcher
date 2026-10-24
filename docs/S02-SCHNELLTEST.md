@@ -39,6 +39,15 @@ erzeugt zwei **einmalige** private Token, überprüft Authentifizierung,
 Parameterregeln, HTTP und zwei sehr kurze Inferenzanfragen, liest SQLite v9
 und beendet seinen eigenen Testprozess wieder.
 
+**Wenn der Dispatcher beim Start scheitert:** Das Skript zeigt automatisch
+die letzten 30 Zeilen seiner gewohnten Konsolenausgabe und den Exit-Code.
+Das vollständige Log bleibt auf dem jeweiligen Rechner unter
+`reports/s02-Laptop_Win.dispatcher-<Zeitstempel>-<PID>.log`.
+Diese privaten Diagnose-Dateien werden von Git ignoriert und weder hochgeladen
+noch zusammen mit den Einmal-Tokens gelöscht. Bitte vor dem Teilen überprüfen:
+Sie können lokale Modellpfade, Konfigurationsdetails und andere private Angaben
+enthalten. Du brauchst keinen zusätzlichen Logger im Dispatcher.
+
 Deine vorhandene `C:\llama.cpp\clients.json` wird nicht verwendet oder
 verändert. Der Test erstellt seine Wegwerf-Tokens selbst.
 
