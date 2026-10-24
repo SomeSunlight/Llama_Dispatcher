@@ -1,6 +1,8 @@
 """Fast self-tests for the operator-facing S02 runner; no processes started."""
 import importlib.util
 import json
+import io
+from contextlib import redirect_stdout
 import os
 import sys
 import tempfile
@@ -113,6 +115,20 @@ class OwnerRunnerTests(unittest.TestCase):
                 runner.cleanup_manual("Laptop_Win")
                 self.assertFalse(secret_path.exists())
                 self.assertFalse(config_path.exists())
+
+    def test_manual_instructions_include_full_inference_command(self):
+        with tempfile.TemporaryDirectory() as folder:
+            output = io.StringIO()
+            with (patch.object(runner, "ROOT", Path(folder)),
+                  patch.object(runner, "is_listening", return_value=False),
+                  redirect_stdout(output)):
+                runner.prepare_manual("Laptop_Win", runner.DEFAULT_URL)
+            self.assertIn(
+                "uv run --frozen python scripts/s02_verify.py --instance "
+                "Laptop_Win --verify-manual --inference",
+                output.getvalue(),
+            )
+            self.assertIn("two tiny real model requests", output.getvalue())
 
     def test_manual_prepare_refuses_to_touch_an_existing_listener(self):
         with tempfile.TemporaryDirectory() as folder:
