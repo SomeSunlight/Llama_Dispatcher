@@ -46,6 +46,29 @@ class OwnerRunnerTests(unittest.TestCase):
                 with self.assertRaises(runner.CheckError):
                     runner.load_start("Laptop_Win", "http://127.0.0.1:8100")
 
+    def test_replay_uses_project_python_not_observed_system_python(self):
+        """Regression for observed OS interpreter without PyYAML/other uv deps."""
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            script = root / "src" / "dispatcher.py"
+            script.parent.mkdir()
+            script.write_text("import yaml\n", encoding="utf-8")
+            captured = ["python3", str(script), "serve", "--ensemble",
+                        "example", "--instance", "Laptop_Win"]
+            with patch.object(runner, "ROOT", root):
+                replay = runner.replay_with_test_python(captured, "Laptop_Win")
+            self.assertEqual(replay[0], str(Path(sys.executable).resolve()))
+            self.assertEqual(replay[1:], captured[1:])
+            self.assertNotEqual(replay[0], captured[0])
+            # The interpreter just proven by the test suite must load PyYAML.
+            # Do not launch a real Dispatcher (or an inference model).
+            import subprocess
+            result = subprocess.run(
+                [replay[0], "-c", "import yaml"],
+                capture_output=True, timeout=10, check=False,
+            )
+            self.assertEqual(result.returncode, 0, result.stderr.decode(errors="replace"))
+
     def test_dispatcher_logs_are_unique_persistent_and_bounded(self):
         with tempfile.TemporaryDirectory() as temp:
             with patch.object(runner, "ROOT", Path(temp)):
