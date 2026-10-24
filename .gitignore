@@ -39,3 +39,7 @@ contextcanon-onboarding/
 
 # Per-run Dispatcher stdout/stderr from S02 owner smoke tests (private)
 /reports/s02-*.dispatcher-*.log
+
+# Disposable S02 manual test identities (contains private raw test tokens)
+/reports/s02-*.manual-clients.json
+/reports/s02-*.manual-secrets.json
