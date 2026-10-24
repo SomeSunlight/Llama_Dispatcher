@@ -1,7 +1,7 @@
 # S02 — Client identity and explicit request policies
 
-**Für den eigentlichen Test zuerst nur [S02-SCHNELLTEST.md](S02-SCHNELLTEST.md) lesen.**
-Der folgende Text ist technische Hintergrunddokumentation, keine Pflichtlektüre.
+**Start with the [short S02 verification guide](S02-quickstart.md) for the operator-facing tests.**
+The rest of this document provides technical background and is not required for the quickstart.
 
 **Owner-gated review:** [Issue #10](https://github.com/SomeSunlight/Llama_Dispatcher/issues/10).
 Prerequisite S01 accepted in [PR #22](https://github.com/SomeSunlight/Llama_Dispatcher/pull/22).
