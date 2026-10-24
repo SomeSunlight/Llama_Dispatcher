@@ -136,7 +136,12 @@ def prepare_manual(instance: str, url: str) -> None:
     print("  In the PowerShell terminal where you normally launch the Dispatcher:")
     print(f"  $env:DISPATCHER_CLIENT_CONFIG = '{str(config_path).replace(chr(39), chr(39)*2)}'")
     print("  Then run your NORMAL working 'uv run src/dispatcher.py serve ...' command.")
-    print("  Keep this Dispatcher running and use --verify-manual in another terminal.")
+    print("  Keep this Dispatcher running. In a SECOND PowerShell terminal run:")
+    command = f"uv run --frozen python scripts/s02_verify.py --instance {instance}"
+    if url != DEFAULT_URL:
+        command += f" --base-url {url}"
+    print(f"  {command} --verify-manual --inference")
+    print("  This sends two tiny real model requests and verifies both client IDs in SQLite.")
     print("  The two disposable secrets remain local in Git-ignored reports/ until cleanup.")
 
 
@@ -560,7 +565,11 @@ def main() -> int:
             verify_identity(url, tokens, args.inference)
             verify_sqlite(args.instance, require_clients=args.inference)
             print("S02 PASS — manually started Dispatcher, two independent client IDs")
-            print("  When finished, stop the Dispatcher yourself and run --cleanup-manual.")
+            print("  When finished, stop the Dispatcher yourself. Clean up in PowerShell:")
+            cleanup = f"uv run --frozen python scripts/s02_verify.py --instance {args.instance}"
+            if url != DEFAULT_URL:
+                cleanup += f" --base-url {url}"
+            print(f"  {cleanup} --cleanup-manual")
             return 0
         if args.save_start:
             save_start(args.instance, url)
