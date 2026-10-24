@@ -61,7 +61,7 @@ class OwnerRunnerTests(unittest.TestCase):
                     + "Error: local model failed to load\n",
                     encoding="utf-8",
                 )
-                excerpt = runner.log_tail(one, max_lines=3)
+                excerpt = runner.log_tail(one, max_lines=2)
                 self.assertIn("model failed to load", excerpt)
                 self.assertIn("<redacted>", excerpt)
                 self.assertNotIn("private-test-token", excerpt)
