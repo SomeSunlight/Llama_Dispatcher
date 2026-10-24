@@ -236,6 +236,28 @@ def replay_with_test_python(captured: list[str], instance: str) -> list[str]:
     return [str(current), *captured[1:]]
 
 
+def describe_captured_options(command: list[str]) -> dict[str, str | None]:
+    """Read only operational selectors from saved argv, never print entire argv.
+
+    These are the arguments captured from the already working dispatcher.
+    Diagnostic only: unknown options and any potential credential material
+    are not printed or modified. The replay keeps all argv[1:] verbatim.
+    """
+    values: dict[str, str | None] = {}
+    for key in ("--instance", "--ensemble", "--profile", "--model-root"):
+        value = next(
+            (arg.split("=", 1)[1] for arg in command[1:]
+             if arg.startswith(key + "=")),
+            None,
+        )
+        if value is None and key in command:
+            pos = command.index(key)
+            if pos + 1 < len(command):
+                value = command[pos + 1]
+        values[key] = value
+    return values
+
+
 def http_json(url: str, route: str, token: str | None = None,
               body: dict | None = None, timeout: int = 15) -> tuple[int, dict]:
     raw = json.dumps(body).encode() if body is not None else None
@@ -432,6 +454,14 @@ def main() -> int:
             captured = load_start(args.instance, url)
             command = replay_with_test_python(captured, args.instance)
             print(f"  Dispatcher test Python: {command[0]}")
+            captured_opts = describe_captured_options(captured)
+            for name, value in captured_opts.items():
+                if value is not None:
+                    print(f"  Captured {name}: {value}")
+            if captured_opts["--model-root"] is None:
+                print("  Note: captured command contains no --model-root override.")
+            print("  Replay: all captured Dispatcher flags are unchanged; "
+                  "test authentication, console I/O and process group differ.")
             require(not is_listening(url),
                     "Port is occupied: stop your EXISTING *test* Dispatcher yourself. "
                     "This script will never take over another process.")
