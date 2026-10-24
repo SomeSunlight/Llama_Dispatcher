@@ -85,6 +85,97 @@ def auth_fixture(folder: Path) -> dict[str, str]:
     return raw
 
 
+def manual_fixture_paths(instance: str) -> tuple[Path, Path]:
+    """Persistent only across the manual start/check steps; never checked in."""
+    require(bool(_INSTANCE_RE.fullmatch(instance)), "Invalid instance name.")
+    folder = ROOT / "reports"
+    return (
+        folder / f"s02-{instance}.manual-clients.json",
+        folder / f"s02-{instance}.manual-secrets.json",
+    )
+
+
+def _write_private_json(path: Path, obj: dict) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    with os.fdopen(fd, "w", encoding="utf-8") as stream:
+        json.dump(obj, stream, indent=2, ensure_ascii=False)
+        stream.write("\n")
+
+
+def prepare_manual(instance: str, url: str) -> None:
+    """Set up disposable clients without starting/stopping the native engine."""
+    require(not is_listening(url),
+            "The Dispatcher port is occupied. Stop your existing *test* "
+            "Dispatcher yourself before preparing the manual authentication test.")
+    config_path, secrets_path = manual_fixture_paths(instance)
+    require(not config_path.exists() and not secrets_path.exists(),
+            "A manual test configuration already exists. Use --verify-manual "
+            "or --cleanup-manual before creating another.")
+    raw = {
+        "goose": secrets.token_urlsafe(48),
+        "open-webui": secrets.token_urlsafe(48),
+    }
+    client_config = {
+        "schema_version": 1,
+        "clients": [
+            {"id": name, "token_sha256": hashlib.sha256(token.encode()).hexdigest(),
+             "policy": "enforce" if name == "goose" else "default"}
+            for name, token in raw.items()
+        ],
+    }
+    _write_private_json(config_path, client_config)
+    try:
+        _write_private_json(secrets_path, {
+            "schema_version": 1, "instance": instance, "url": url, "tokens": raw,
+        })
+    except Exception:
+        config_path.unlink(missing_ok=True)
+        raise
+    print("  Two disposable clients prepared. No service was started.")
+    print("  In the PowerShell terminal where you normally launch the Dispatcher:")
+    print(f"  $env:DISPATCHER_CLIENT_CONFIG = '{str(config_path).replace(chr(39), chr(39)*2)}'")
+    print("  Then run your NORMAL working 'uv run src/dispatcher.py serve ...' command.")
+    print("  Keep this Dispatcher running and use --verify-manual in another terminal.")
+    print("  The two disposable secrets remain local in Git-ignored reports/ until cleanup.")
+
+
+def load_manual(instance: str, url: str) -> dict[str, str]:
+    config_path, secrets_path = manual_fixture_paths(instance)
+    require(config_path.is_file() and secrets_path.is_file(),
+            "No prepared manual test. Use --prepare-manual before starting the Dispatcher.")
+    try:
+        credentials = json.loads(secrets_path.read_text(encoding="utf-8"))
+        doc = json.loads(config_path.read_text(encoding="utf-8"))
+    except (ValueError, OSError) as exc:
+        raise CheckError("Manual test configuration is unreadable.") from exc
+    tokens = credentials.get("tokens")
+    require(credentials.get("schema_version") == 1
+            and credentials.get("instance") == instance
+            and credentials.get("url") == url
+            and isinstance(tokens, dict)
+            and set(tokens) == {"goose", "open-webui"}
+            and all(isinstance(v, str) and len(v) >= 40 for v in tokens.values()),
+            "Manual test credentials are invalid or not for this instance/port.")
+    require(doc.get("schema_version") == 1 and isinstance(doc.get("clients"), list),
+            "Manual test client digest file is invalid.")
+    for name, token in tokens.items():
+        wanted = hashlib.sha256(token.encode()).hexdigest()
+        require(any(x.get("id") == name and x.get("token_sha256") == wanted
+                    for x in doc["clients"] if isinstance(x, dict)),
+                "Manual test token does not match the configured credential digest.")
+    return tokens
+
+
+def cleanup_manual(instance: str) -> None:
+    """Remove disposable local tokens/config only; never touch the Dispatcher."""
+    paths = manual_fixture_paths(instance)
+    for p in paths:
+        p.unlink(missing_ok=True)
+    print("  Manual S02 test credentials removed from local reports/ (not secure erasure).")
+    print("  No running process was stopped or modified.")
+
+
 def check_command(command: list[str], instance: str) -> None:
     require(isinstance(command, list) and all(isinstance(x, str) and x for x in command),
             "Saved start command must be a non-empty argv list.")
@@ -431,6 +522,12 @@ def main() -> int:
                         help="Local Dispatcher URL, normally http://127.0.0.1:8001")
     parser.add_argument("--save-start", action="store_true",
                         help="Capture the existing running test Dispatcher start command locally")
+    parser.add_argument("--prepare-manual", action="store_true",
+                        help="Generate private throwaway clients for your normal PowerShell start")
+    parser.add_argument("--verify-manual", action="store_true",
+                        help="Test an already-running, manually started authenticated Dispatcher")
+    parser.add_argument("--cleanup-manual", action="store_true",
+                        help="Remove temporary manual test credentials; never stop a process")
     parser.add_argument("--start", action="store_true",
                         help="Start ONLY your previously captured local test Dispatcher")
     parser.add_argument("--inference", action="store_true",
@@ -440,10 +537,31 @@ def main() -> int:
     try:
         require(bool(_INSTANCE_RE.fullmatch(args.instance)), "Invalid instance name.")
         endpoint(url)
-        require(not (args.save_start and (args.start or args.inference)),
-                "Use --save-start by itself, while the original test Dispatcher is running.")
+        mode_count = sum(bool(x) for x in (
+            args.save_start, args.prepare_manual, args.verify_manual,
+            args.cleanup_manual, args.start,
+        ))
+        require(mode_count <= 1, "Select only one S02 execution mode.")
+        require(not args.inference or args.start or args.verify_manual,
+                "--inference is supported only with --start or --verify-manual.")
         print(f"S02 verification: {args.instance} (local Dispatcher, not Strata)")
+        if args.cleanup_manual:
+            cleanup_manual(args.instance)
+            print("S02 MANUAL CONFIG CLEANED")
+            return 0
         unit_tests()
+        if args.prepare_manual:
+            prepare_manual(args.instance, url)
+            print("S02 MANUAL AUTH READY")
+            return 0
+        if args.verify_manual:
+            tokens = load_manual(args.instance, url)
+            require(is_listening(url), "Start the local Dispatcher yourself first.")
+            verify_identity(url, tokens, args.inference)
+            verify_sqlite(args.instance, require_clients=args.inference)
+            print("S02 PASS — manually started Dispatcher, two independent client IDs")
+            print("  When finished, stop the Dispatcher yourself and run --cleanup-manual.")
+            return 0
         if args.save_start:
             save_start(args.instance, url)
             print("S02 START COMMAND SAVED")
