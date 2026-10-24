@@ -1,0 +1,313 @@
+{
+  "changes": [],
+  "compiler_version": "0.8.0",
+  "digests": {
+    "normalized": "84059d150dbac284f37771223ad02b45f08ab24116960dab9c1e4a844eef1dee",
+    "package": "9f375b7647238fba7d4b6361c85b75813351510a8097e0741d721bf93413a6e5"
+  },
+  "files": [
+    {
+      "path": ".context/resource-origins.json",
+      "sha256": "e6cf97b50ce62d0f9eff7e6198bef15e368467f61b197cb243d2344db061dfaf",
+      "size": 402
+    },
+    {
+      "path": "CONTEXT.md",
+      "sha256": "ce2ec9397538d40be039a41c24cff55d6a5e299956a59d06f76238765c3bb71d",
+      "size": 8994
+    },
+    {
+      "path": "CONTEXT/README.md",
+      "sha256": "37bdcad600896b9c2995e058911dfd9cc25433d9cf924c0bcbe15e41941f0ebb",
+      "size": 2146
+    },
+    {
+      "path": "CONTEXT/references/n7a3bd8b0815855d/CONTEXT.md",
+      "sha256": "e3d74914f467a7c57024254488d640663ef8feb489ed1f4335d07039b9987483",
+      "size": 261
+    },
+    {
+      "path": "CONTEXT/references/n7a3bd8b0815855d/README.md",
+      "sha256": "9c3f60c329c32126ef07d3d0714dbaf18d8087283c59eb038f31ce9cd1d5d09f",
+      "size": 28700
+    }
+  ],
+  "imports": [
+    {
+      "id": "e3e6391b-6eb7-4b2a-ba1d-f969a65bbf08",
+      "name": "Llama Dispatcher",
+      "normalized_digest": "ef5444bb73d49f4914fe680cedc8ad0679da599ed4c7ef68ca910be9969620fa",
+      "package_digest": "21c98f31b5b1bb1c552f6a1c1a1cdeb853ad2f899ddb37db6e66b0aa678bcb4f",
+      "version": "0.1.2-draft",
+      "why": null
+    }
+  ],
+  "node": {
+    "id": "5a5bf4f7-2cdd-4c35-90bb-4195d9759e5a",
+    "name": "Dispatcher Code",
+    "version": "0.1.1-draft"
+  },
+  "parents": [],
+  "removed_rules": [],
+  "rules": [
+    {
+      "group": "Onboarding placement",
+      "id": "ONB-B97F676A25A3",
+      "modifications": [],
+      "origin_node_id": "e3e6391b-6eb7-4b2a-ba1d-f969a65bbf08",
+      "origin_node_name": "Llama Dispatcher",
+      "statement": "Maintain each configuration fact once in the layer that owns it; do not put engine flags in profiles, model paths in engine files, or duplicate model sampling defaults. Shared instance configuration must not duplicate operating-system-specific runtime paths; launchers should supply machine-local binary and model roots explicitly, with environment variables only as documented optional fallbacks. Backend-specific process environment such as GPU-selection variables belongs in the engine configuration and is applied by Dispatcher when it launches llama.cpp rather than being required in the caller's shell. Instance repositories under `instances/<name>/` are user-owned independent Git repositories: Dispatcher core ignores their contents and must not register or manage them as Git submodules.",
+      "title": "Keep configuration in its owning layer",
+      "why": "Clear ownership prevents conflicting configuration, repeated maintenance, and hidden ambient startup state."
+    },
+    {
+      "group": "Onboarding placement",
+      "id": "ONB-D855038AE157",
+      "modifications": [],
+      "origin_node_id": "e3e6391b-6eb7-4b2a-ba1d-f969a65bbf08",
+      "origin_node_name": "Llama Dispatcher",
+      "statement": "Configuration is deep-merged in this order: model defaults, instance engine defaults, profile, ensemble model entry; ad-hoc llama.cpp CLI overrides have highest priority.",
+      "title": "Configuration precedence",
+      "why": "A deterministic precedence order makes the effective llama.cpp configuration predictable."
+    },
+    {
+      "group": "Onboarding placement",
+      "id": "ONB-BEC5C7AA7DF9",
+      "modifications": [],
+      "origin_node_id": "e3e6391b-6eb7-4b2a-ba1d-f969a65bbf08",
+      "origin_node_name": "Llama Dispatcher",
+      "statement": "Manage dependencies with uv rather than direct pip, conda, or poetry commands, and run tests or project executions through uv run.",
+      "title": "Use uv for project dependency and execution workflows",
+      "why": "The project uses one dependency and execution workflow to keep environments consistent."
+    },
+    {
+      "group": "Onboarding placement",
+      "id": "ONB-B08B43994998",
+      "modifications": [],
+      "origin_node_id": "e3e6391b-6eb7-4b2a-ba1d-f969a65bbf08",
+      "origin_node_name": "Llama Dispatcher",
+      "statement": "Strictly separate observed, declared, and unknown facts.",
+      "title": "Separate observed, declared, and unknown facts",
+      "why": "Implementation and documentation should not turn assumptions into asserted project facts."
+    },
+    {
+      "group": "Onboarding placement",
+      "id": "ONB-1C62845C8746",
+      "modifications": [],
+      "origin_node_id": "e3e6391b-6eb7-4b2a-ba1d-f969a65bbf08",
+      "origin_node_name": "Llama Dispatcher",
+      "statement": "Configuration describes intent; code implements it, never the other way around.",
+      "title": "Configuration states intent",
+      "why": "Runtime transformation should follow explicit configuration instead of hidden code-side policy."
+    },
+    {
+      "group": "Onboarding placement",
+      "id": "ONB-55B57FDB7635",
+      "modifications": [],
+      "origin_node_id": "e3e6391b-6eb7-4b2a-ba1d-f969a65bbf08",
+      "origin_node_name": "Llama Dispatcher",
+      "statement": "Prefer small, understandable changes.",
+      "title": "Prefer small understandable changes",
+      "why": "Small coherent changes are easier to review, test, and reason about."
+    },
+    {
+      "group": "Onboarding placement",
+      "id": "ONB-CF84E4C6F53C",
+      "modifications": [],
+      "origin_node_id": "5a5bf4f7-2cdd-4c35-90bb-4195d9759e5a",
+      "origin_node_name": "Dispatcher Code",
+      "statement": "Normalize parameter keys by removing leading dashes, replacing underscores with dashes, and mapping known shorthands or aliases to canonical long forms without leading dashes.",
+      "title": "Canonicalize parameter names",
+      "why": "One canonical representation prevents silent mismatches across defaults, profiles, ensembles, CLI input, and telemetry."
+    },
+    {
+      "group": "Onboarding placement",
+      "id": "ONB-984989C18F45",
+      "modifications": [],
+      "origin_node_id": "5a5bf4f7-2cdd-4c35-90bb-4195d9759e5a",
+      "origin_node_name": "Dispatcher Code",
+      "statement": "Add new llama.cpp parameters to PARAM_MAPPING in dispatcher.py when shorthand or spelling canonicalization is required.",
+      "title": "Register new llama.cpp parameters",
+      "why": "The mapping is the explicit source for translating accepted aliases into canonical parameter names."
+    },
+    {
+      "group": "Onboarding placement",
+      "id": "ONB-A289C8E1C079",
+      "modifications": [],
+      "origin_node_id": "5a5bf4f7-2cdd-4c35-90bb-4195d9759e5a",
+      "origin_node_name": "Dispatcher Code",
+      "statement": "For parameters configured by the selected alias, Dispatcher policy overwrites client values; request parameters not managed by that alias pass through unchanged.",
+      "title": "Dispatcher policy overrides managed client values",
+      "why": "Central configuration must be authoritative without blocking unrelated OpenAI-compatible or future llama.cpp request fields."
+    },
+    {
+      "group": "Onboarding placement",
+      "id": "ONB-011D1E449CE4",
+      "modifications": [],
+      "origin_node_id": "5a5bf4f7-2cdd-4c35-90bb-4195d9759e5a",
+      "origin_node_name": "Dispatcher Code",
+      "statement": "When chat_template_kwargs is configured for an alias, replace the client object with the configured object rather than recursively merging it.",
+      "title": "Replace chat_template_kwargs as one policy value",
+      "why": "The runtime treats chat_template_kwargs as one Dispatcher policy value."
+    },
+    {
+      "group": "Onboarding placement",
+      "id": "ONB-42B7C96FD895",
+      "modifications": [],
+      "origin_node_id": "5a5bf4f7-2cdd-4c35-90bb-4195d9759e5a",
+      "origin_node_name": "Dispatcher Code",
+      "statement": "Preserve client intent before transformation and log the request resolution and effective values after policy enforcement and optional target remapping.",
+      "title": "Preserve and log request transformation",
+      "why": "Telemetry must show both what the client requested and what llama.cpp actually received."
+    },
+    {
+      "group": "Onboarding placement",
+      "id": "ONB-31FE7C306176",
+      "modifications": [],
+      "origin_node_id": "5a5bf4f7-2cdd-4c35-90bb-4195d9759e5a",
+      "origin_node_name": "Dispatcher Code",
+      "statement": "Exclude messages, prompt, and input from proxy parameter snapshots while retaining request control parameters.",
+      "title": "Do not duplicate prompt content in proxy telemetry",
+      "why": "Telemetry should capture request controls without duplicating conversation or prompt content."
+    },
+    {
+      "group": "Onboarding placement",
+      "id": "ONB-0683CD8DD4E6",
+      "modifications": [],
+      "origin_node_id": "5a5bf4f7-2cdd-4c35-90bb-4195d9759e5a",
+      "origin_node_name": "Dispatcher Code",
+      "statement": "In ensemble operation, clients must connect to the Dispatcher proxy rather than directly to the internal llama.cpp server.",
+      "title": "Clients must use the Dispatcher proxy",
+      "why": "Direct llama.cpp access bypasses virtual aliases, Dispatcher parameter injection, alias remapping, and proxy telemetry."
+    },
+    {
+      "group": "Onboarding placement",
+      "id": "ONB-E8D9548EEF1A",
+      "modifications": [],
+      "origin_node_id": "5a5bf4f7-2cdd-4c35-90bb-4195d9759e5a",
+      "origin_node_name": "Dispatcher Code",
+      "statement": "Do not modify an execution_runs record after it has been written.",
+      "title": "Execution runs are immutable historical headers",
+      "why": "execution_runs is the historical run header."
+    },
+    {
+      "group": "Onboarding placement",
+      "id": "ONB-A55465DE0A77",
+      "modifications": [],
+      "origin_node_id": "5a5bf4f7-2cdd-4c35-90bb-4195d9759e5a",
+      "origin_node_name": "Dispatcher Code",
+      "statement": "Record exactly one serve_model_instance even in Single Profile Mode.",
+      "title": "Record a runtime model instance in every mode",
+      "why": "Evaluations remain homogeneous between single-profile and ensemble modes."
+    },
+    {
+      "group": "Onboarding placement",
+      "id": "ONB-4C56740CAE0C",
+      "modifications": [],
+      "origin_node_id": "5a5bf4f7-2cdd-4c35-90bb-4195d9759e5a",
+      "origin_node_name": "Dispatcher Code",
+      "statement": "Validate external FastAPI endpoint payloads with Pydantic models or explicit validation.",
+      "title": "Validate FastAPI payloads",
+      "why": "External request data must be checked before it enters orchestration logic."
+    },
+    {
+      "group": "Onboarding placement",
+      "id": "ONB-D8F736F7E29E",
+      "modifications": [],
+      "origin_node_id": "5a5bf4f7-2cdd-4c35-90bb-4195d9759e5a",
+      "origin_node_name": "Dispatcher Code",
+      "statement": "Do not use blocking calls such as time.sleep or subprocess.run in the orchestrator; start subprocesses and consume their logs asynchronously.",
+      "title": "Keep orchestration non-blocking",
+      "why": "Blocking calls would stall the asynchronous service."
+    },
+    {
+      "group": "Onboarding placement",
+      "id": "ONB-7C2D6BDA8E2A",
+      "modifications": [],
+      "origin_node_id": "5a5bf4f7-2cdd-4c35-90bb-4195d9759e5a",
+      "origin_node_name": "Dispatcher Code",
+      "statement": "metrics_bench.speed_error is mandatory.",
+      "title": "Benchmark speed error is mandatory",
+      "why": "Benchmark measurements should carry their uncertainty."
+    },
+    {
+      "group": "Onboarding placement",
+      "id": "ONB-1E18D00C3698",
+      "modifications": [],
+      "origin_node_id": "5a5bf4f7-2cdd-4c35-90bb-4195d9759e5a",
+      "origin_node_name": "Dispatcher Code",
+      "statement": "metrics_eval.perplexity_error is mandatory where available.",
+      "title": "Perplexity error is mandatory when available",
+      "why": "Evaluation measurements should carry their uncertainty when it can be computed."
+    },
+    {
+      "group": "Onboarding placement",
+      "id": "ONB-21DD5242E6FD",
+      "modifications": [],
+      "origin_node_id": "5a5bf4f7-2cdd-4c35-90bb-4195d9759e5a",
+      "origin_node_name": "Dispatcher Code",
+      "statement": "Do not record a measurement without an error value when repetitions are available.",
+      "title": "Repeated measurements require an error value",
+      "why": "Repeated measurements provide the information needed to report uncertainty."
+    },
+    {
+      "group": "Onboarding placement",
+      "id": "ONB-F1D506B24D9F",
+      "modifications": [],
+      "origin_node_id": "5a5bf4f7-2cdd-4c35-90bb-4195d9759e5a",
+      "origin_node_name": "Dispatcher Code",
+      "statement": "Make new features testable first with --compile-only or /debug/preview where applicable.",
+      "title": "Make new behavior previewable before full operation",
+      "why": "Configuration and request transformations should be inspectable before a full runtime path is exercised."
+    },
+    {
+      "group": "Onboarding placement",
+      "id": "ONB-67CE0D860DA2",
+      "modifications": [],
+      "origin_node_id": "5a5bf4f7-2cdd-4c35-90bb-4195d9759e5a",
+      "origin_node_name": "Dispatcher Code",
+      "statement": "For schema evolution, avoid destructive updates to existing measurement data, use PRAGMA user_version, and map migrations in a controlled manner in database_manager.py.",
+      "title": "Future schema evolution safeguards",
+      "why": "Measurement history must remain trustworthy across future schema changes."
+    },
+    {
+      "group": "Onboarding placement",
+      "id": "ONB-1BE2684D2D39",
+      "modifications": [],
+      "origin_node_id": "5a5bf4f7-2cdd-4c35-90bb-4195d9759e5a",
+      "origin_node_name": "Dispatcher Code",
+      "statement": "Store parameter names in canonical dashed form in the database, but write OpenAI-compatible request JSON keys with underscores when forwarding to llama.cpp.",
+      "title": "Store canonical DB keys and OpenAI JSON keys",
+      "why": "Internal canonicalization and the external OpenAI-compatible API use different naming conventions."
+    }
+  ],
+  "schema": "contextcanon/package/v4",
+  "sources": [
+    {
+      "id": "e3e6391b-6eb7-4b2a-ba1d-f969a65bbf08",
+      "name": "Llama Dispatcher",
+      "normalized_digest": "ef5444bb73d49f4914fe680cedc8ad0679da599ed4c7ef68ca910be9969620fa",
+      "package_digest": "21c98f31b5b1bb1c552f6a1c1a1cdeb853ad2f899ddb37db6e66b0aa678bcb4f",
+      "relationship": "parent",
+      "version": "0.1.2-draft",
+      "why": null
+    }
+  ],
+  "topics": [
+    {
+      "condition": "When operating or troubleshooting Dispatcher serve/bench/eval commands, debug endpoints, CLI overrides, database views, or detailed parameter naming, consult the README operating reference.",
+      "id": "ONB-5CDAC841D567",
+      "origin_node_id": "5a5bf4f7-2cdd-4c35-90bb-4195d9759e5a",
+      "origin_node_name": "Dispatcher Code",
+      "targets": [
+        {
+          "intent": "required",
+          "kind": "resource",
+          "locator": "CONTEXT/references/n7a3bd8b0815855d/README.md",
+          "resource_id": "RESOURCE-170CDF801AB6"
+        }
+      ],
+      "title": "Dispatcher operating reference"
+    }
+  ]
+}

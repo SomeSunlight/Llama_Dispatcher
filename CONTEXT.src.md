@@ -1,19 +1,46 @@
 # Llama Dispatcher — Local Context Source
-<!-- ctx:node id="e3e6391b-6eb7-4b2a-ba1d-f969a65bbf08" name="Llama Dispatcher" version="0.1.1-draft" -->
+<!-- ctx:node id="e3e6391b-6eb7-4b2a-ba1d-f969a65bbf08" name="Llama Dispatcher" version="0.1.2-draft" -->
 
-## Local Overview
+<!-- contextcanon:format Node
+Format: Node metadata follows the # title: ctx:node id="..." name="..." version="...". Preserve existing identity.
+Details: CONTEXT-format.md
+-->
 
-<!-- contextcanon-placement-overview:start -->
-<!-- cc:placement-overview id="ONB-40902CFCE27F" -->
-- Llama Dispatcher is an asynchronous orchestrator and OpenAI-compatible proxy for llama.cpp.
-<!-- contextcanon-placement-overview:end -->
+<!-- contextcanon:source-help:intro:start -->
+Edit this local Context source; ContextCanon generates CONTEXT.md from it.
+Some sections use a strict syntax. The comments below show the expected format.
+New Rules, Topics and Resources receive IDs automatically during build; preserve existing IDs.
+See [the source format guide](CONTEXT-format.md) for examples and editing instructions.
+<!-- contextcanon:source-help:intro:end -->
 
-## Sources
+## Context Imports
+
+<!-- contextcanon:format Context Imports
+Format: - [Name](location) — `version` — `relationship=parent|reference`; optional indented Why:, then ctx:source metadata. Preserve exact pins; use source list/adopt/update for package identity.
+Details: CONTEXT-format.md
+-->
 
 <!-- contextcanon-placement-sources:start -->
 <!-- contextcanon-placement-sources:end -->
 
+## Local Overview
+
+<!-- contextcanon:format Local Overview
+Format: Ordinary Markdown orientation, local to this Node. Any existing placement identity follows its paragraph/item; do not change it.
+Details: CONTEXT-format.md
+-->
+
+<!-- contextcanon-placement-overview:start -->
+- Llama Dispatcher is an asynchronous orchestrator and OpenAI-compatible proxy for llama.cpp.
+  <!-- cc:placement-overview id="ONB-40902CFCE27F" -->
+<!-- contextcanon-placement-overview:end -->
+
 ## Local Rules
+
+<!-- contextcanon:format Local Rules
+Format: ### Group, then - **Title:** Statement, then indented Why: Rationale. build adds a missing ctx:rule ID after the entry; preserve existing IDs.
+Details: CONTEXT-format.md
+-->
 
 <!-- contextcanon-placement-rules:start -->
 ### Onboarding placement

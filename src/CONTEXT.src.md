@@ -1,70 +1,102 @@
 # Dispatcher Code — Local Context Source
-<!-- ctx:node id="5a5bf4f7-2cdd-4c35-90bb-4195d9759e5a" name="Dispatcher Code" version="0.1.0-draft" -->
+<!-- ctx:node id="5a5bf4f7-2cdd-4c35-90bb-4195d9759e5a" name="Dispatcher Code" version="0.1.1-draft" -->
 
-## Parent Context Node
+<!-- contextcanon:format Node
+Format: Node metadata follows the # title: ctx:node id="..." name="..." version="...". Preserve existing identity.
+Details: CONTEXT-format.md
+-->
+
+<!-- contextcanon:source-help:intro:start -->
+Edit this local Context source; ContextCanon generates CONTEXT.md from it.
+Some sections use a strict syntax. The comments below show the expected format.
+New Rules, Topics and Resources receive IDs automatically during build; preserve existing IDs.
+See [the source format guide](CONTEXT-format.md) for examples and editing instructions.
+<!-- contextcanon:source-help:intro:end -->
+
+## Context Imports
+
+<!-- contextcanon:format Context Imports
+Format: - [Name](location) — `version` — `relationship=parent|reference`; optional indented Why:, then ctx:source metadata. Preserve exact pins; use source list/adopt/update for package identity.
+Details: CONTEXT-format.md
+-->
 
 <!-- contextcanon-placement-parent:start -->
-- [Llama Dispatcher](..) — `0.1.0-draft`
-  <!-- ctx:parent id="e3e6391b-6eb7-4b2a-ba1d-f969a65bbf08" version="0.1.0-draft" normalized-digest="df766041a54764767cd3ee6bf254a030808df7a8c20ec9ae3c83f3853e5a8305" package-digest="ec8ca549a9905b2361cef49ad86774c4889381725f7815044ea4a82a361bfc6e" -->
+- [Llama Dispatcher](..) — `0.1.2-draft` — `relationship=parent`
+  <!-- ctx:source id="e3e6391b-6eb7-4b2a-ba1d-f969a65bbf08" version="0.1.2-draft" normalized-digest="ef5444bb73d49f4914fe680cedc8ad0679da599ed4c7ef68ca910be9969620fa" package-digest="21c98f31b5b1bb1c552f6a1c1a1cdeb853ad2f899ddb37db6e66b0aa678bcb4f" -->
 <!-- contextcanon-placement-parent:end -->
 
 ## Local Overview
 
+<!-- contextcanon:format Local Overview
+Format: Ordinary Markdown orientation, local to this Node. Any existing placement identity follows its paragraph/item; do not change it.
+Details: CONTEXT-format.md
+-->
+
 <!-- contextcanon-placement-overview:start -->
-<!-- cc:placement-overview id="ONB-9434DC39E0AE" -->
 - Dispatcher code compiles profiles and ensembles into llama.cpp parameters, starts llama.cpp, and collects metrics.
+  <!-- cc:placement-overview id="ONB-9434DC39E0AE" -->
 
-<!-- cc:placement-overview id="ONB-52671788E89A" -->
 - The Dispatcher proxy exposes configured model aliases to clients, enforces centrally configured request parameters, and forwards effective requests to llama.cpp.
+  <!-- cc:placement-overview id="ONB-52671788E89A" -->
 
-<!-- cc:placement-overview id="ONB-3AA7204F1FD7" -->
 - A proxy-only alias can target a real llama.cpp alias, rewrite the request model, and apply its own policy while sharing the same loaded model in VRAM.
+  <!-- cc:placement-overview id="ONB-3AA7204F1FD7" -->
 
-<!-- cc:placement-overview id="ONB-19C8A7718A41" -->
 - chat_template_kwargs is injected by the proxy into requests and is not written to the llama.cpp INI.
+  <!-- cc:placement-overview id="ONB-19C8A7718A41" -->
 
-<!-- cc:placement-overview id="ONB-73A34A2AD35A" -->
 - Proxy handling distinguishes the client model alias, the resolved backing profile, and the effective target model sent to llama.cpp.
+  <!-- cc:placement-overview id="ONB-73A34A2AD35A" -->
 
-<!-- cc:placement-overview id="ONB-1F0733D8FD42" -->
 - Ensemble mode starts llama.cpp with the Dispatcher proxy; single-profile mode starts llama.cpp directly from one profile without router INI or proxy aliasing.
+  <!-- cc:placement-overview id="ONB-1F0733D8FD42" -->
 
-<!-- cc:placement-overview id="ONB-5E681FFCD08F" -->
 - An execution_run represents the main process.
+  <!-- cc:placement-overview id="ONB-5E681FFCD08F" -->
 
-<!-- cc:placement-overview id="ONB-C4C94C6CDECA" -->
 - A serve_model_instance represents one effectively loaded model.
+  <!-- cc:placement-overview id="ONB-C4C94C6CDECA" -->
 
-<!-- cc:placement-overview id="ONB-3EA477E1491E" -->
 - metrics_serve refers to both the historical execution run and the specific loaded-model origin.
+  <!-- cc:placement-overview id="ONB-3EA477E1491E" -->
 
-<!-- cc:placement-overview id="ONB-1DCD56E83A83" -->
 - The Dispatcher proxy is the observation point for original client request parameters; llama.cpp sees the already transformed request.
+  <!-- cc:placement-overview id="ONB-1DCD56E83A83" -->
 <!-- contextcanon-placement-overview:end -->
 
 ## Local State
 
+<!-- contextcanon:format Local State
+Format: Ordinary Markdown describing the current local situation. Any existing placement identity follows its paragraph/item; preserve it.
+Details: CONTEXT-format.md
+-->
+
 <!-- contextcanon-placement-state:start -->
-<!-- cc:placement-state id="ONB-CCF62CBAA356" -->
 - The current runtime keeps compiled alias policy but not a full provenance tree for each value; it can identify dispatcher_policy plus alias/profile context, not the exact originating configuration layer.
+  <!-- cc:placement-state id="ONB-CCF62CBAA356" -->
 
-<!-- cc:placement-state id="ONB-C4C1FD4D00BE" -->
 - The Dispatcher proxy defaults to port 8001.
+  <!-- cc:placement-state id="ONB-C4C1FD4D00BE" -->
 
-<!-- cc:placement-state id="ONB-C2F8E48BE5EA" -->
 - The internal llama.cpp server defaults to port 8081.
+  <!-- cc:placement-state id="ONB-C2F8E48BE5EA" -->
 
-<!-- cc:placement-state id="ONB-9F3DE4C4C5D0" -->
 - The Dispatcher proxy currently provides no browser web UI.
+  <!-- cc:placement-state id="ONB-9F3DE4C4C5D0" -->
 
-<!-- cc:placement-unresolved id="ONB-5D4DB3C8503C" -->
 - Open question: Are existing metrics databases upgraded additively, or is there no migration from older versions and the schema is built fresh?
+  <!-- cc:placement-unresolved id="ONB-5D4DB3C8503C" -->
 
-<!-- cc:placement-unresolved id="ONB-0C719E0D5E75" -->
 - Open question: What is the canonical proxy request telemetry table name: metrics_proxy_requests or proxy_requests?
+  <!-- cc:placement-unresolved id="ONB-0C719E0D5E75" -->
 <!-- contextcanon-placement-state:end -->
 
 ## Local Rules
+
+<!-- contextcanon:format Local Rules
+Format: ### Group, then - **Title:** Statement, then indented Why: Rationale. build adds a missing ctx:rule ID after the entry; preserve existing IDs.
+Details: CONTEXT-format.md
+-->
 
 <!-- contextcanon-placement-rules:start -->
 ### Onboarding placement
@@ -140,6 +172,11 @@
 
 ## Local Topics
 
+<!-- contextcanon:format Local Topics
+Format: ### Title, condition text, Required: and/or Optional:, then - Resource: `path` or - Context Node: `node-path`. Resource may have indented Why:. build adds missing Topic/Resource IDs after their entries; preserve existing IDs.
+Details: CONTEXT-format.md
+-->
+
 <!-- contextcanon-placement-topics:start -->
 ### Dispatcher operating reference
 
@@ -147,6 +184,7 @@ When operating or troubleshooting Dispatcher serve/bench/eval commands, debug en
 
 Required:
 - Resource: `../README.md`
+  <!-- ctx:resource id="RESOURCE-170CDF801AB6" -->
 
 <!-- ctx:topic id="ONB-5CDAC841D567" -->
 <!-- contextcanon-placement-topics:end -->

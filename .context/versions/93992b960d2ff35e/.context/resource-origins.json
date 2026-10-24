@@ -1,0 +1,15 @@
+{
+  "resources": [
+    {
+      "node_id": "5a5bf4f7-2cdd-4c35-90bb-4195d9759e5a",
+      "path": "CONTEXT/references/n7a3bd8b0815855d/CONTEXT.md",
+      "repo_path": "CONTEXT.md"
+    },
+    {
+      "node_id": "5a5bf4f7-2cdd-4c35-90bb-4195d9759e5a",
+      "path": "CONTEXT/references/n7a3bd8b0815855d/README.md",
+      "repo_path": "README.md"
+    }
+  ],
+  "schema": "contextcanon/resource-origins/v1"
+}
