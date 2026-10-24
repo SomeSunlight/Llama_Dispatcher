@@ -53,12 +53,13 @@ class OwnerRunnerTests(unittest.TestCase):
             "thinkpad-sycl-gemma_26B", "--instance", "Laptop_Win",
             "--model-root", "C:\\AI_Models\\LLM\\GGUF_Raw",
         ]
+        original = captured.copy()
         values = runner.describe_captured_options(captured)
         self.assertEqual(values["--instance"], "Laptop_Win")
         self.assertEqual(values["--ensemble"], "thinkpad-sycl-gemma_26B")
         self.assertEqual(values["--model-root"], "C:\\AI_Models\\LLM\\GGUF_Raw")
         self.assertEqual(values["--profile"], None)
-        self.assertEqual(captured[1:], captured[1:])  # no mutation
+        self.assertEqual(captured, original)  # no mutation
         equals_form = runner.describe_captured_options([
             sys.executable, "src/dispatcher.py", "serve",
             "--instance=Laptop_WSL", "--model-root=/mnt/models",
