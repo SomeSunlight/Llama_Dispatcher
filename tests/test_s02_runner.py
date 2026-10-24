@@ -56,9 +56,9 @@ class OwnerRunnerTests(unittest.TestCase):
                 with self.assertRaises(runner.CheckError):
                     runner.dispatcher_log_path("../other")
                 one.write_text(
-                    "early log line\\n" * 35
-                    + "Authorization: Bearer private-test-token\\n"
-                    + "Error: local model failed to load\\n",
+                    "early log line\n" * 35
+                    + "Authorization: Bearer private-test-token\n"
+                    + "Error: local model failed to load\n",
                     encoding="utf-8",
                 )
                 excerpt = runner.log_tail(one, max_lines=3)
