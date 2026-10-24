@@ -22,8 +22,38 @@ from pydantic import BaseModel, Field
 
 from database_manager import MetricsDatabase
 from inference_backend import LlamaCppBackend
+from client_policy import (
+    ClientSecurity, ClientConfigurationError, apply_request_policy, load_client_security,
+)
 
 app = FastAPI(title="Llama Dispatcher Control API")
+
+# Opt-in: the existing deployment stays permissive until a private auth file
+# is explicitly supplied at process startup. No identity header is trusted.
+CLIENT_SECURITY = ClientSecurity()
+
+
+@app.middleware("http")
+async def authenticate_clients(request: Request, call_next):
+    path = request.url.path
+    protected = (
+        path == "/v1" or path.startswith("/v1/")
+        or path == "/debug" or path.startswith("/debug/")
+        or path in ("/switch", "/stop")
+    )
+    if protected and CLIENT_SECURITY.enabled:
+        identity = CLIENT_SECURITY.authenticate(request.headers.get("authorization"))
+        if identity is None:
+            return JSONResponse(
+                {"error": {"message": "Authentication required.", "type": "authentication_error"}},
+                status_code=401, headers={"WWW-Authenticate": "Bearer"},
+            )
+        request.state.client_id = identity.client_id
+        request.state.policy_mode = identity.policy
+    else:
+        request.state.client_id = None
+        request.state.policy_mode = "enforce"  # exact S00 default
+    return await call_next(request)
 
 # S01 selects only the existing llama.cpp adapter. No Strata/attach runtime yet.
 LEGACY_LLAMA_BACKEND = LlamaCppBackend()
@@ -1171,7 +1201,19 @@ class LlamaOrchestrator:
 
                 uptime = asyncio.get_event_loop().time() - start_time
                 if uptime < 15.0:
-                    print(f"\n[FATAL] Server crashed immediately on startup ({uptime:.1f}s). Aborting.")
+                    # Windows native errors may only surface as a process exit
+                    # status, e.g. 0xC0000135 for a missing runtime DLL.
+                    # Keep the legacy fatal boundary; add non-secret diagnostics.
+                    exit_code = self.current_process.returncode
+                    hex_code = (
+                        f" (0x{exit_code & 0xFFFFFFFF:08X})"
+                        if os.name == "nt" and isinstance(exit_code, int) else ""
+                    )
+                    print(
+                        f"\n[FATAL] Server crashed immediately on startup "
+                        f"({uptime:.1f}s); llama-server exit code: "
+                        f"{exit_code}{hex_code}. Aborting.", flush=True
+                    )
                     self.is_running = False
                     os._exit(1)
                 else:
@@ -1363,12 +1405,33 @@ def _extract_thinking(req_data: dict) -> int | None:
     return None
 
 
-_REQUEST_CONTENT_KEYS = {"messages", "prompt", "input"}
+# Explicit allowlist: unknown request fields may contain private tool arguments,
+# images, files or messages. Forward them unchanged but NEVER persist their values.
+_SAFE_PARAMETER_KEYS = frozenset({
+    "model", "stream", "temperature", "top_p", "top_k", "min_p",
+    "max_tokens", "max_completion_tokens", "n", "seed", "stop",
+    "presence_penalty", "frequency_penalty", "repeat_penalty",
+    "reasoning_effort", "thinking_budget", "stream_options",
+    "mirostat", "mirostat_tau", "mirostat_eta", "typical_p", "min_keep",
+})
+_REQUEST_CONTENT_KEYS = frozenset({
+    "messages", "prompt", "input", "tools", "tool_calls", "functions", "documents",
+    "audio", "image", "images", "file", "files",
+})
 
 
 def _request_params_snapshot(req_data: dict[str, Any]) -> dict[str, Any]:
-    """Return request control parameters without prompt or conversation content."""
-    return {k: v for k, v in req_data.items() if k not in _REQUEST_CONTENT_KEYS}
+    """Store only known-safe controls, not prompt, tool or unknown extension data."""
+    safe = {k: v for k, v in req_data.items()
+            if k in _SAFE_PARAMETER_KEYS and not isinstance(v, (dict, list))}
+    ctk = req_data.get("chat_template_kwargs")
+    if isinstance(ctk, dict):
+        safe_ctk = {k: v for k, v in ctk.items()
+                    if k in ("enable_thinking", "thinking_budget", "reasoning_effort")
+                    and isinstance(v, (bool, int, float, str))}
+        if safe_ctk:
+            safe["chat_template_kwargs"] = safe_ctk
+    return safe
 
 
 def _parameter_changes(
@@ -1444,25 +1507,19 @@ async def proxy_to_llama(path: str, request: Request):
 
     # Preserve the untouched client-side control parameters before any mutation.
     client_params = _request_params_snapshot(req_data)
+    client_id = getattr(request.state, "client_id", None)
+    policy_mode = getattr(request.state, "policy_mode", "enforce")
     client_model = req_data.get("model")
     is_stream = bool(req_data.get("stream", False))
 
-    # ── Parameter injection from profile ──────────────────────────────────────
-    # Profile parameters always take precedence over client values (for REQUEST_SAMPLING_KEYS
-    # and chat_template_kwargs). Everything else (model, messages, stream, max_tokens,
-    # tools, etc.) passes through unchanged from the client.
+    # ── Explicit per-client policy (S02) ──────────────────────────────────────
+    # Legacy and per-client "enforce" retain the S00 profile-wins behavior.
     model_alias = req_data.get("model", "")
     profile_params = orchestrator._proxy_sampling_params.get(model_alias, {})
-    injected: dict[str, Any] = {}
-
-    if profile_params:
-        modified_data = req_data.copy()
-        for k, v in profile_params.items():
-            if req_data.get(k) != v:
-                injected[k] = v
-            modified_data[k] = v
-        body_bytes = json.dumps(modified_data, ensure_ascii=False).encode("utf-8")
-        req_data = modified_data
+    original_data = req_data
+    req_data, injected = apply_request_policy(req_data, profile_params, policy_mode)
+    if req_data != original_data:
+        body_bytes = json.dumps(req_data, ensure_ascii=False).encode("utf-8")
 
     # ── Alias remapping ───────────────────────────────────────────────────────
     # Proxy-only aliases exist only in the dispatcher; llama.cpp only knows the real alias.
@@ -1481,13 +1538,22 @@ async def proxy_to_llama(path: str, request: Request):
     parameter_changes = _parameter_changes(
         client_params, effective_params, client_model, target_model, resolved_profile
     )
-    injected_json: str | None = json.dumps(injected, ensure_ascii=False, sort_keys=True) if injected else None
+    safe_injected = _request_params_snapshot(injected)
+    injected_json: str | None = json.dumps(safe_injected, ensure_ascii=False, sort_keys=True) if safe_injected else None
 
     # Host and content-length are set anew by httpx
-    forward_headers = {
-        k: v for k, v in request.headers.items()
-        if k.lower() not in {"host", "content-length", "transfer-encoding"}
-    }
+    if CLIENT_SECURITY.enabled:
+        # Credentials and spoofable client-id/proxy-trust headers never reach an engine.
+        allowed_headers = {"content-type", "accept", "accept-encoding", "user-agent"}
+        forward_headers = {
+            k: v for k, v in request.headers.items() if k.lower() in allowed_headers
+        }
+    else:
+        # Preserve the pre-S02 wire contract until explicit auth migration.
+        forward_headers = {
+            k: v for k, v in request.headers.items()
+            if k.lower() not in {"host", "content-length", "transfer-encoding"}
+        }
     # Use the backend's HTTP endpoint seam; S00 mocks have no backend attribute.
     # This is still *only* the legacy managed llama.cpp route, never an attach.
     backend = getattr(orchestrator, "backend", LEGACY_LLAMA_BACKEND)
@@ -1564,6 +1630,8 @@ async def proxy_to_llama(path: str, request: Request):
                     ttft=stats.get("ttft"),
                     status_code=stats.get("status_code", 200),
                     injected_params=injected_json,
+                    client_id=client_id,
+                    policy_mode=policy_mode,
                 )
             except Exception as log_err:
                 print(f"[PROXY] Logging error: {log_err}")
@@ -1626,15 +1694,12 @@ async def debug_preview(request: Request):
 
     model_alias = req_data.get("model", "")
     profile_params = orchestrator._proxy_sampling_params.get(model_alias, {})
-    injected: dict[str, Any] = {}
-    forwarded = req_data.copy()
-
-    # Sampling-injection (identical to real proxy logic)
-    if profile_params:
-        for k, v in profile_params.items():
-            if req_data.get(k) != v:
-                injected[k] = {"from_profile": v, "client_sent": req_data.get(k)}
-            forwarded[k] = v
+    policy_mode = getattr(request.state, "policy_mode", "enforce")
+    forwarded, policy_injected = apply_request_policy(req_data, profile_params, policy_mode)
+    injected = {
+        k: {"from_profile": v, "client_sent": req_data.get(k)}
+        for k, v in policy_injected.items()
+    }
 
     # Alias-remapping
     llama_alias = orchestrator._proxy_alias_targets.get(model_alias, model_alias)
@@ -1642,17 +1707,25 @@ async def debug_preview(request: Request):
     if alias_rewritten:
         forwarded["model"] = llama_alias
 
+    # Redact content in authenticated diagnostics; preserve legacy S00 preview
+    # until a deliberate client migration is accepted.
+    safe_forwarded = (
+        {k: ("<redacted>" if k.lower() in _REQUEST_CONTENT_KEYS else v)
+         for k, v in forwarded.items()}
+        if CLIENT_SECURITY.enabled else forwarded
+    )
     return JSONResponse({
         "original_model": model_alias,
         "forwarded_model": llama_alias,
         "alias_rewritten": alias_rewritten,
+        "policy_mode": policy_mode,
         "injected_params": injected,
         "overridden_by_client": {
-            k: req_data[k] for k in profile_params
+            k: req_data[k] for k in policy_injected
             if k in req_data and req_data[k] != profile_params[k]
                and k not in ("chat_template_kwargs",)
         },
-        "forwarded_body": forwarded,
+        "forwarded_body": safe_forwarded,
         "note": "This is a simulation – no request was sent to llama.cpp.",
     })
 
@@ -1719,7 +1792,7 @@ def parse_cli_overrides(unknown_args: list) -> dict:
 
 
 def main():
-    global orchestrator, DATA_DIR, PROFILES_DIR, ENSEMBLES_DIR
+    global orchestrator, DATA_DIR, PROFILES_DIR, ENSEMBLES_DIR, CLIENT_SECURITY
 
     parser = argparse.ArgumentParser(description="Llama Orchestrator (Compiler & Dispatcher)")
     parser.add_argument("mode", choices=["serve", "bench", "eval"])
@@ -1748,6 +1821,12 @@ def main():
 
     args, unknown = parser.parse_known_args()
     overrides = parse_cli_overrides(unknown)
+    try:
+        CLIENT_SECURITY = load_client_security()
+    except ClientConfigurationError as exc:
+        sys.exit(f"[ERROR] Client authentication: {exc}")
+    if CLIENT_SECURITY.enabled:
+        print(f"[AUTH] Enabled for {len(CLIENT_SECURITY.clients)} configured clients.")
 
     # ── Resolve instance and set global paths ─────────────────────────────────
     machine_id = "unknown"

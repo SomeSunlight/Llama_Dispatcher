@@ -1,0 +1,200 @@
+"""Fast self-tests for the operator-facing S02 runner; no processes started."""
+import importlib.util
+import json
+import io
+from contextlib import redirect_stdout
+import os
+import sys
+import tempfile
+import unittest
+from pathlib import Path
+from unittest.mock import patch
+
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "src"))
+from client_policy import load_client_security  # noqa: E402
+
+spec = importlib.util.spec_from_file_location("s02_verify", ROOT / "scripts" / "s02_verify.py")
+runner = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(runner)
+
+
+class OwnerRunnerTests(unittest.TestCase):
+    def test_one_runner_accepts_explicit_local_instance_without_machine_table(self):
+        self.assertEqual(runner.endpoint(runner.DEFAULT_URL), ("127.0.0.1", 8001))
+        for url in ("https://example.org:8080", "http://192.168.0.12:8001",
+                    "http://127.0.0.1:8080/strata/v1"):
+            with self.assertRaises(runner.CheckError):
+                runner.endpoint(url)
+        with self.assertRaises(runner.CheckError):
+            runner.launch_file("../outside")
+
+    def test_capture_and_reload_verified_local_start_without_process_control(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            argv = [sys.executable, str(root / "src" / "dispatcher.py"),
+                    "serve", "--ensemble", "test", "--instance", "Laptop_Win"]
+            observation = {"capture": "procfs_python_argv", "argv": argv}
+            with (patch.object(runner, "ROOT", root),
+                  patch.object(runner, "is_listening", return_value=True),
+                  patch.object(runner, "find_launch", return_value=observation)):
+                runner.save_start("Laptop_Win", runner.DEFAULT_URL)
+                private_file = runner.launch_file("Laptop_Win")
+                self.assertTrue(private_file.is_file())
+                self.assertEqual(
+                    runner.load_start("Laptop_Win", runner.DEFAULT_URL), argv,
+                )
+                with self.assertRaises(runner.CheckError):
+                    runner.load_start("Laptop_WSL", runner.DEFAULT_URL)
+                with self.assertRaises(runner.CheckError):
+                    runner.load_start("Laptop_Win", "http://127.0.0.1:8100")
+
+    def test_captured_start_options_remain_visible_and_unmodified(self):
+        captured = [
+            sys.executable, "src/dispatcher.py", "serve", "--ensemble",
+            "thinkpad-sycl-gemma_26B", "--instance", "Laptop_Win",
+            "--model-root", "C:\\AI_Models\\LLM\\GGUF_Raw",
+        ]
+        original = captured.copy()
+        values = runner.describe_captured_options(captured)
+        self.assertEqual(values["--instance"], "Laptop_Win")
+        self.assertEqual(values["--ensemble"], "thinkpad-sycl-gemma_26B")
+        self.assertEqual(values["--model-root"], "C:\\AI_Models\\LLM\\GGUF_Raw")
+        self.assertEqual(values["--profile"], None)
+        self.assertEqual(captured, original)  # no mutation
+        equals_form = runner.describe_captured_options([
+            sys.executable, "src/dispatcher.py", "serve",
+            "--instance=Laptop_WSL", "--model-root=/mnt/models",
+        ])
+        self.assertEqual(equals_form["--model-root"], "/mnt/models")
+
+    def test_replay_uses_project_python_not_observed_system_python(self):
+        """Regression for observed OS interpreter without PyYAML/other uv deps."""
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            script = root / "src" / "dispatcher.py"
+            script.parent.mkdir()
+            script.write_text("import yaml\n", encoding="utf-8")
+            captured = ["python.exe" if os.name == "nt" else "python3",
+                        str(script), "serve", "--ensemble",
+                        "example", "--instance", "Laptop_Win"]
+            with patch.object(runner, "ROOT", root):
+                replay = runner.replay_with_test_python(captured, "Laptop_Win")
+            self.assertEqual(replay[0], sys.executable)
+            self.assertEqual(replay[1:], captured[1:])
+            self.assertNotEqual(replay[0], captured[0])
+            # The interpreter just proven by the test suite must load PyYAML.
+            # Do not launch a real Dispatcher (or an inference model).
+            import subprocess
+            result = subprocess.run(
+                [replay[0], "-c", "import yaml"],
+                capture_output=True, timeout=10, check=False,
+            )
+            self.assertEqual(result.returncode, 0, result.stderr.decode(errors="replace"))
+
+    def test_manual_auth_flow_never_starts_processes_or_commits_raw_tokens(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            with (patch.object(runner, "ROOT", root),
+                  patch.object(runner, "is_listening", return_value=False)):
+                with patch.object(runner.subprocess, "Popen",
+                                  side_effect=AssertionError("Must never launch")):
+                    runner.prepare_manual("Laptop_Win", runner.DEFAULT_URL)
+                config_path, secret_path = runner.manual_fixture_paths("Laptop_Win")
+                self.assertTrue(config_path.exists())
+                self.assertTrue(secret_path.exists())
+                keys = runner.load_manual("Laptop_Win", runner.DEFAULT_URL)
+                self.assertEqual(set(keys), {"goose", "open-webui"})
+                config = json.loads(config_path.read_text(encoding="utf-8"))
+                for k in keys.values():
+                    self.assertNotIn(k, json.dumps(config))
+                with self.assertRaises(runner.CheckError):
+                    runner.prepare_manual("Laptop_Win", runner.DEFAULT_URL)
+                with self.assertRaises(runner.CheckError):
+                    runner.load_manual("Laptop_Win", "http://127.0.0.1:8002")
+                runner.cleanup_manual("Laptop_Win")
+                self.assertFalse(secret_path.exists())
+                self.assertFalse(config_path.exists())
+
+    def test_manual_instructions_include_full_inference_command(self):
+        with tempfile.TemporaryDirectory() as folder:
+            output = io.StringIO()
+            with (patch.object(runner, "ROOT", Path(folder)),
+                  patch.object(runner, "is_listening", return_value=False),
+                  redirect_stdout(output)):
+                runner.prepare_manual("Laptop_Win", runner.DEFAULT_URL)
+            self.assertIn(
+                "uv run --frozen python scripts/s02_verify.py --instance "
+                "Laptop_Win --verify-manual --inference",
+                output.getvalue(),
+            )
+            self.assertIn("two tiny real model requests", output.getvalue())
+
+    def test_manual_prepare_refuses_to_touch_an_existing_listener(self):
+        with tempfile.TemporaryDirectory() as folder:
+            with (patch.object(runner, "ROOT", Path(folder)),
+                  patch.object(runner, "is_listening", return_value=True)):
+                with self.assertRaises(runner.CheckError):
+                    runner.prepare_manual("Laptop_Win", runner.DEFAULT_URL)
+                self.assertFalse(runner.manual_fixture_paths("Laptop_Win")[0].exists())
+
+    def test_dispatcher_logs_are_unique_persistent_and_bounded(self):
+        with tempfile.TemporaryDirectory() as temp:
+            with patch.object(runner, "ROOT", Path(temp)):
+                one = runner.dispatcher_log_path("Laptop_Win")
+                self.assertEqual(one.parent, Path(temp) / "reports")
+                self.assertFalse(one.exists())
+                self.assertEqual(one.parent.name, "reports")
+                with self.assertRaises(runner.CheckError):
+                    runner.dispatcher_log_path("../other")
+                one.write_text(
+                    "early log line\n" * 35
+                    + "Authorization: Bearer private-test-token\n"
+                    + "Error: local model failed to load\n",
+                    encoding="utf-8",
+                )
+                excerpt = runner.log_tail(one, max_lines=2)
+                self.assertIn("model failed to load", excerpt)
+                self.assertIn("<redacted>", excerpt)
+                self.assertNotIn("private-test-token", excerpt)
+                self.assertNotIn("early log line", excerpt)
+                # A missing file gives a human-readable reason, not an exception.
+                self.assertIn("missing", runner.log_tail(one.with_name("missing.log")))
+
+    def test_empty_log_describes_exited_without_output(self):
+        with tempfile.TemporaryDirectory() as temp:
+            empty = Path(temp) / "empty.log"
+            empty.write_text("", encoding="utf-8")
+            self.assertIn("no output", runner.log_tail(empty))
+
+    def test_private_fixture_is_valid_and_does_not_contain_bearer_tokens(self):
+        with tempfile.TemporaryDirectory() as temp:
+            folder = Path(temp)
+            keys = runner.auth_fixture(folder)
+            doc = json.loads((folder / "clients.json").read_text(encoding="utf-8"))
+            self.assertEqual([x["id"] for x in doc["clients"]], ["goose", "open-webui"])
+            self.assertEqual([x["policy"] for x in doc["clients"]],
+                             ["enforce", "default"])
+            self.assertNotEqual(keys["goose"], keys["open-webui"])
+            self.assertTrue(all(raw not in json.dumps(doc) for raw in keys.values()))
+            security = load_client_security(str(folder / "clients.json"))
+            for identity, token in keys.items():
+                self.assertEqual(security.authenticate("Bearer " + token).client_id, identity)
+
+    def test_refuses_unrelated_or_cross_instance_process_command(self):
+        correct = [sys.executable, "src/dispatcher.py", "serve",
+                   "--ensemble", "test", "--instance", "Laptop_Win"]
+        runner.check_command(correct, "Laptop_Win")
+        for command in (
+            ["strata", "--data-dir", "local"],
+            ["python", "src/dispatcher.py", "serve", "--ensemble", "test",
+             "--instance", "Speedy_Win"],
+            ["python", "src/dispatcher.py", "bench", "--ensemble", "test",
+             "--instance", "Laptop_Win"],
+        ):
+            with self.assertRaises(runner.CheckError):
+                runner.check_command(command, "Laptop_Win")
+
+
+if __name__ == "__main__":
+    unittest.main()

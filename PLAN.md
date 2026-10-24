@@ -3,7 +3,7 @@
 **Planning revision:** 2026-10-19 (proposal for owner review; no runtime/code changes in this PR).
 **Epic:** [#8](https://github.com/SomeSunlight/Llama_Dispatcher/issues/8).
 **Baseline:** S00 [#19](https://github.com/SomeSunlight/Llama_Dispatcher/issues/19) was owner-tested across three Windows/WSL installations and [PR #20](https://github.com/SomeSunlight/Llama_Dispatcher/pull/20) merged into `main` on 2026-10-19.
-**Next coding gate:** S01 [#9](https://github.com/SomeSunlight/Llama_Dispatcher/issues/9), **only after owner acceptance of this planning revision**.
+**Accepted S01:** [PR #22](https://github.com/SomeSunlight/Llama_Dispatcher/pull/22) owner-tested (unit, live, SQLite and tiny streaming/nonstreaming inference) and squash-merged 2026-10-20. **Next gate:** S02 [#10](https://github.com/SomeSunlight/Llama_Dispatcher/issues/10), under independent owner review.
 
 > This document defines the **intended future boundary**, not a claim that the current Dispatcher is already attach-only. The currently accepted llama.cpp managed-start path remains functional until a separately approved transition explicitly retires it.
 
@@ -36,6 +36,7 @@ See [docs/runtime-ownership-contract.md](docs/runtime-ownership-contract.md) for
 ## 3. Invariants / acceptance policy
 
 - **Owner-gated development**: one scoped issue → tests and PR → owner's local smoke testing and explicit approval → merge → next dependent gate. Keep a working `main`, rollback path, and independent instance migrations.
+- **Readable commit history**: PR titles describe a user-visible outcome in clear, short language. Keep technical implementation details in PR bodies and commit details. Repository setting **Settings → General → Pull Requests → Allow squash merging → Default commit message → Pull request title** makes the squash title equal the reviewed PR title.
 - **Do not break Speedy**: leave direct Caddy `/strata/v1` diagnostic route operational until Dispatcher `/v1` is authenticated and validated from Goose and Open WebUI; preserve current 131072 context, image/vision, runtime options and calibration.
 - **Client identity before cutover**: distinct revocable credentials for Goose and Open WebUI; verify Caddy trust boundary, no attribution based solely on User-Agent or untrusted headers. No secrets/prompts/responses in Git, JSON plans, metrics or ordinary logs.
 - **Observed vs declared**: maintain four facts separately: client request, Dispatcher policy, exact forwarded request, engine-observed behavior. Unknown remains unknown. Attached runs must never be recorded as Dispatcher-launched.
@@ -49,7 +50,7 @@ See [docs/runtime-ownership-contract.md](docs/runtime-ownership-contract.md) for
 Checked boxes denote **merged and owner-accepted**, not merely coded. Preserve existing issue IDs so historical discussion stays navigable.
 
 - [x] **S00 — [#19](https://github.com/SomeSunlight/Llama_Dispatcher/issues/19)**: Baseline characterization only. [PR #20](https://github.com/SomeSunlight/Llama_Dispatcher/pull/20) accepted and squash-merged on 2026-10-19; owner reports successful runs across three Windows/WSL installations. No production refactor.
-- [ ] **S01 — [#9](https://github.com/SomeSunlight/Llama_Dispatcher/issues/9)**: Extract small, capability-aware llama.cpp backend / compile vs proxy / attachment seams **without changing current managed llama.cpp behavior**. Tests from S00 are mandatory. Define endpoint-attachment contract. Requires S00 and this plan's approval.
+- [x] **S01 — [#9](https://github.com/SomeSunlight/Llama_Dispatcher/issues/9)**: Extract small, capability-aware llama.cpp backend / compile vs proxy / attachment seams **without changing current managed llama.cpp behavior**. Tests from S00 are mandatory. Define endpoint-attachment contract. Requires S00 and this plan's approval. Owner accepted and squash-merged [PR #22](https://github.com/SomeSunlight/Llama_Dispatcher/pull/22) on 2026-10-20, including live inference regression.
 - [ ] **S02 — [#10](https://github.com/SomeSunlight/Llama_Dispatcher/issues/10)**: Per-client authentication/identity and explicit `default/enforce/passthrough` policy, preserving current clients until a tested migration. Requires S01; **required before any Strata production cutover**.
 - [ ] **S03 — [#11](https://github.com/SomeSunlight/Llama_Dispatcher/issues/11)**: **First deliverable with real user value:** Strata HTTP attach-only adapter and proxy aliases; test long streaming/tool calling, vision, reasoning semantics, cancellation, large context and authentication against the currently running Speedy Strata. Do not start/stop Strata; preserve direct Caddy route as fallback. Requires S01 + S02; **external supervisor is NOT a prerequisite**.
 - [ ] **S04 — [#12](https://github.com/SomeSunlight/Llama_Dispatcher/issues/12)**: Additive engine-neutral SQLite/run/config/provenance schema. Attached process is observed, not owned; external supervisor is process-lifecycle authority. Can be designed with S02/S03 but implementation is a separately accepted PR.

@@ -1,8 +1,8 @@
--- Llama Dispatcher metrics schema v8
+-- Llama Dispatcher metrics schema v9 (S02 client identity)
 -- New column machine_id in execution_runs for multi-instance support.
 -- Existing v4 databases are migrated via _upgrade_schema() in database_manager.py.
 PRAGMA foreign_keys = ON;
-PRAGMA user_version = 8;
+PRAGMA user_version = 9;
 
 CREATE TABLE IF NOT EXISTS execution_runs (
     run_id TEXT PRIMARY KEY,
@@ -113,6 +113,8 @@ CREATE TABLE IF NOT EXISTS metrics_proxy_requests (
 
     -- Explicit request-resolution model (schema v7).
     client_model TEXT,                    -- exact public alias sent by the client
+    client_id TEXT,                       -- authenticated principal; NULL = legacy/unknown
+    policy_mode TEXT,                     -- default/enforce/passthrough; NULL = historical
     resolved_profile TEXT,                -- Dispatcher profile backing client_model
     target_model TEXT,                    -- effective model alias sent to llama.cpp
     alias_remapped INTEGER,               -- 1 when client_model != target_model
@@ -152,6 +154,8 @@ SELECT
     timestamp,
     endpoint,
     client_model,
+    client_id,
+    policy_mode,
     resolved_profile,
     target_model,
     alias_remapped,

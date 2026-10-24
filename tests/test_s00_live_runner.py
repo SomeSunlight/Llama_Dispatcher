@@ -100,7 +100,7 @@ class SmokeRunnerTests(unittest.TestCase):
             path = Path(tmp) / "metrics.db"
             with closing(sqlite3.connect(path)) as conn, conn:
                 conn.executescript("""
-                    PRAGMA user_version = 8;
+                    PRAGMA user_version = 9;
                     CREATE TABLE metrics_proxy_requests (id INTEGER);
                     CREATE TABLE execution_runs (id INTEGER);
                     CREATE TABLE serve_model_instances (id INTEGER);
@@ -108,7 +108,7 @@ class SmokeRunnerTests(unittest.TestCase):
                       SELECT id FROM metrics_proxy_requests;
                 """)
                 conn.execute("INSERT INTO metrics_proxy_requests VALUES (11)")
-            self.assertEqual(smoke.read_db_metadata(path)["schema_version"], 8)
+            self.assertEqual(smoke.read_db_metadata(path)["schema_version"], 9)
             with closing(sqlite3.connect(path)) as conn, conn:
                 self.assertEqual(conn.execute(
                     "SELECT COUNT(*) FROM metrics_proxy_requests").fetchone()[0], 1)

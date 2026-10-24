@@ -67,12 +67,14 @@ class MetricsDatabase:
 
             tables = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
             if "metrics_proxy_requests" not in tables:
-                conn.execute("PRAGMA user_version = 8")
+                conn.execute("PRAGMA user_version = 9")
                 return
 
             pcols = {row[1] for row in conn.execute("PRAGMA table_info(metrics_proxy_requests)")}
             additions = {
                 "injected_params": "TEXT",
+                "client_id": "TEXT",
+                "policy_mode": "TEXT",
                 "client_model": "TEXT",
                 "resolved_profile": "TEXT",
                 "target_model": "TEXT",
@@ -132,9 +134,13 @@ class MetricsDatabase:
                 "CREATE INDEX IF NOT EXISTS idx_proxy_requests_run "
                 "ON metrics_proxy_requests(run_id)"
             )
-            conn.execute("PRAGMA user_version = 8")
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_proxy_requests_client_id "
+                "ON metrics_proxy_requests(client_id)"
+            )
+            conn.execute("PRAGMA user_version = 9")
             if added:
-                print("[DB] Schema upgrade to v7: added proxy request logging columns: " + ", ".join(added))
+                print("[DB] Additive proxy schema upgrade: " + ", ".join(added))
 
     @staticmethod
     def _json(data: Any) -> str:
@@ -341,6 +347,8 @@ class MetricsDatabase:
         ttft: float | None,
         status_code: int,
         injected_params: str | None = None,
+        client_id: str | None = None,
+        policy_mode: str | None = None,
     ):
         """Log client intent, Dispatcher resolution, effective request, and response metrics."""
         with sqlite3.connect(self.db_path) as conn:
@@ -356,9 +364,9 @@ class MetricsDatabase:
                     effective_repeat_penalty, effective_max_tokens, effective_enable_thinking,
                     client_params_json, effective_params_json, parameter_changes_json,
                     prompt_tokens, completion_tokens, finish_reason, duration, ttft,
-                    status_code, injected_params
+                    status_code, injected_params, client_id, policy_mode
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     self.machine_id, run_id, _now_local(), endpoint, model_requested,
@@ -370,7 +378,7 @@ class MetricsDatabase:
                     self._json(client_params), self._json(effective_params),
                     self._json(parameter_changes),
                     prompt_tokens, completion_tokens, finish_reason, duration, ttft,
-                    status_code, injected_params,
+                    status_code, injected_params, client_id, policy_mode,
                 ),
             )
 
