@@ -46,6 +46,35 @@ class OwnerRunnerTests(unittest.TestCase):
                 with self.assertRaises(runner.CheckError):
                     runner.load_start("Laptop_Win", "http://127.0.0.1:8100")
 
+    def test_dispatcher_logs_are_unique_persistent_and_bounded(self):
+        with tempfile.TemporaryDirectory() as temp:
+            with patch.object(runner, "ROOT", Path(temp)):
+                one = runner.dispatcher_log_path("Laptop_Win")
+                self.assertEqual(one.parent, Path(temp) / "reports")
+                self.assertFalse(one.exists())
+                self.assertEqual(one.parent.name, "reports")
+                with self.assertRaises(runner.CheckError):
+                    runner.dispatcher_log_path("../other")
+                one.write_text(
+                    "early log line\\n" * 35
+                    + "Authorization: Bearer private-test-token\\n"
+                    + "Error: local model failed to load\\n",
+                    encoding="utf-8",
+                )
+                excerpt = runner.log_tail(one, max_lines=3)
+                self.assertIn("model failed to load", excerpt)
+                self.assertIn("<redacted>", excerpt)
+                self.assertNotIn("private-test-token", excerpt)
+                self.assertNotIn("early log line", excerpt)
+                # A missing file gives a human-readable reason, not an exception.
+                self.assertIn("missing", runner.log_tail(one.with_name("missing.log")))
+
+    def test_empty_log_describes_exited_without_output(self):
+        with tempfile.TemporaryDirectory() as temp:
+            empty = Path(temp) / "empty.log"
+            empty.write_text("", encoding="utf-8")
+            self.assertIn("no output", runner.log_tail(empty))
+
     def test_private_fixture_is_valid_and_does_not_contain_bearer_tokens(self):
         with tempfile.TemporaryDirectory() as temp:
             folder = Path(temp)
