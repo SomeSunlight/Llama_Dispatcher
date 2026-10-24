@@ -42,6 +42,20 @@ erzeugt zwei **einmalige** private Token, überprüft Authentifizierung,
 Parameterregeln, HTTP und zwei sehr kurze Inferenzanfragen, liest SQLite v9
 und beendet seinen eigenen Testprozess wieder.
 
+**Abgleich der Startparameter:** Der Test zeigt beim Start nun die
+ursprünglich erfassten Werte für `--instance`, `--ensemble` und
+`--model-root` an. Vergleiche sie mit deinem sonst funktionierenden
+`uv run src/dispatcher.py serve ...`. Der Test behält die übrigen
+Dispatcher-Argumente bei, startet aber aus Sicherheitsgründen in einer eigenen
+Prozessgruppe, leitet seine Konsolenausgabe ins Log um und verwendet temporäre
+Test-Authentifizierung. Diese Unterschiede können bei nativen SYCL-Starts
+relevant sein und müssen bei einem Absturz untersucht werden.
+
+Wenn `llama-server.exe` unmittelbar beendet wird, erscheint zusätzlich dessen
+**nativer Exit-Code** (unter Windows auch hexadezimal). Damit lassen sich z. B.
+fehlende Laufzeitbibliotheken von normalen Modellfehlern unterscheiden, ohne
+einen solchen Fehler vorab zu behaupten.
+
 **Wenn der Dispatcher beim Start scheitert:** Das Skript zeigt automatisch
 die letzten 30 Zeilen seiner gewohnten Konsolenausgabe und den Exit-Code.
 Das vollständige Log bleibt auf dem jeweiligen Rechner unter
