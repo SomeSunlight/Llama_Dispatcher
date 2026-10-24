@@ -2,25 +2,222 @@
   "changes": [],
   "compiler_version": "0.8.0",
   "digests": {
-    "normalized": "ef5444bb73d49f4914fe680cedc8ad0679da599ed4c7ef68ca910be9969620fa",
-    "package": "be0802803884202d2af92fce4e4c0bf3c824023a5928edce02aa98834a0ddd17"
+    "normalized": "3f07a13d6691257ea4130a87196de01ce0ad72e0fb7dfb9d93d9c6a17125e035",
+    "package": "e2c2f27cdcb9c4526087e9fd5256de6d431074db9886134329a471ec2a6bfebc"
   },
   "files": [
     {
+      "path": ".context/resource-origins.json",
+      "sha256": "086ac8e51a93c878e24601d529e411fda16d7d4c94fb0f4fd8ddf56eed1a437e",
+      "size": 546
+    },
+    {
       "path": "CONTEXT.md",
-      "sha256": "09ab9b566c1d6bbffded4aae14256d5d7b81032fc0321d9a7e1d263e37721602",
-      "size": 2333
+      "sha256": "292846b0b65159d7975185dac3e7e61b1a2f17deebe1a2e5cc0ad6ad6bca957a",
+      "size": 9623
+    },
+    {
+      "path": "CONTEXT/README.md",
+      "sha256": "37bdcad600896b9c2995e058911dfd9cc25433d9cf924c0bcbe15e41941f0ebb",
+      "size": 2146
+    },
+    {
+      "path": "CONTEXT/references/ne68be75ed7bf392/docs/change-workflow.md",
+      "sha256": "21ac62e2449effee4c2172ba02438c2f5093c9dc7e0235684fcb78801b851060",
+      "size": 9670
+    },
+    {
+      "path": "CONTEXT/references/ne68be75ed7bf392/docs/version-provenance-python.md",
+      "sha256": "124440f4a2ed17d7bfbf265ac2936fa38695e6699069acc94f19f38a92b4351f",
+      "size": 6107
     }
   ],
-  "imports": [],
+  "imports": [
+    {
+      "id": "c4c94726-3cc7-4df6-b779-72bbf9c06f40",
+      "name": "Development Workflow",
+      "normalized_digest": "c63c332918c6f2209abac5be453342d07b10c52fb3a21022f7ad25ab7ea8860b",
+      "package_digest": "04e53389249e34b248b18c80df0adf1767261285c8a152df418b69720a83f731",
+      "version": "0.3.7-draft",
+      "why": null
+    },
+    {
+      "id": "ccf4d7ee-4db1-4110-9ddc-5d70c69cf2bc",
+      "name": "GitHub",
+      "normalized_digest": "3efd3dfdfec720e048fb84df4db4f0d1ed86f1a9f5486314a482789c1bd2850b",
+      "package_digest": "3e0883cbf8e963f29c028af8a73bcbe87123d7328b5b797c273d4faa38d5e3b9",
+      "version": "0.1.8-draft",
+      "why": null
+    }
+  ],
   "node": {
     "id": "e3e6391b-6eb7-4b2a-ba1d-f969a65bbf08",
     "name": "Llama Dispatcher",
-    "version": "0.1.2-draft"
+    "version": "0.1.3-draft"
   },
   "parents": [],
   "removed_rules": [],
   "rules": [
+    {
+      "group": "Recoverable planning",
+      "id": "CCW-010",
+      "modifications": [],
+      "origin_node_id": "c4c94726-3cc7-4df6-b779-72bbf9c06f40",
+      "origin_node_name": "Development Workflow",
+      "statement": "Before implementation, framework-context, or substantial documentation changes, ensure an Issue records why the change exists; it may be brief.",
+      "title": "Back every change with an Issue",
+      "why": "Repository history should show the reason without reconstructing chat history."
+    },
+    {
+      "group": "Recoverable planning",
+      "id": "CCW-001",
+      "modifications": [],
+      "origin_node_id": "c4c94726-3cc7-4df6-b779-72bbf9c06f40",
+      "origin_node_name": "Development Workflow",
+      "statement": "Before starting a new coherent development block, record a short purpose and checklist in the project's durable planning surface; use `PLAN.md` when the project follows this workflow convention.",
+      "title": "Plan a coherent change block before editing",
+      "why": "Repository state must explain what work is in progress even if the chat, model session, or tool run disappears."
+    },
+    {
+      "group": "Recoverable planning",
+      "id": "CCW-002",
+      "modifications": [],
+      "origin_node_id": "c4c94726-3cc7-4df6-b779-72bbf9c06f40",
+      "origin_node_name": "Development Workflow",
+      "statement": "When a listed step is actually complete, mark its `PLAN.md` checkbox `[x]` immediately rather than reconstructing completion at the end of a long session.",
+      "title": "Checkpoint completed plan items immediately",
+      "why": "Immediate checkpoints turn PLAN into a reliable recovery ledger instead of requiring plan archaeology after an interruption."
+    },
+    {
+      "group": "Recoverable planning",
+      "id": "CCW-003",
+      "modifications": [],
+      "origin_node_id": "c4c94726-3cc7-4df6-b779-72bbf9c06f40",
+      "origin_node_name": "Development Workflow",
+      "statement": "Put decisions, active constraints, accepted state, and next steps needed to resume work in repository documentation such as `PLAN.md`, `STATE.md`, or the project's equivalent rather than relying on chat history or model memory.",
+      "title": "Keep recovery-critical knowledge in the repository",
+      "why": "Long conversations and agent sessions are transient; the repository is the durable shared recovery point for humans and tools."
+    },
+    {
+      "group": "Recoverable planning",
+      "id": "CCW-007",
+      "modifications": [],
+      "origin_node_id": "c4c94726-3cc7-4df6-b779-72bbf9c06f40",
+      "origin_node_name": "Development Workflow",
+      "statement": "When the project owner resumes work after a short conversational interruption, explicitly says to continue, and reports no intervening repository changes, continue from the last established branch/PR state unless a repository operation gives evidence that it changed. Do not spend a new work cycle re-checking already established repository facts merely to prove that nothing happened.",
+      "title": "Resume recent explicit continuation without re-proving unchanged state",
+      "why": "In a controlled single-owner workflow, repeated defensive re-verification consumes the useful working window without adding evidence. Any stated or observed intervening change still invalidates this assumption."
+    },
+    {
+      "group": "Transparent machine semantics",
+      "id": "CCW-012",
+      "modifications": [],
+      "origin_node_id": "c4c94726-3cc7-4df6-b779-72bbf9c06f40",
+      "origin_node_name": "Development Workflow",
+      "statement": "When Markdown is also parsed, compiled, extracted, or otherwise given machine-significant meaning, every field or wording whose value affects machine semantics must live in an explicitly marked machine structure rather than being inferred from ordinary presentation prose. Keep that machine significance recognizable in rendered and review surfaces; rendering may style or summarize the control structure, but must not make the machine/human boundary indistinguishable.",
+      "title": "Mark machine-significant Markdown explicitly",
+      "why": "Humans must be able to tell which Markdown is freely editable presentation and which content participates in operational semantics; hidden parser contracts turn harmless-looking prose edits into surprising behavior."
+    },
+    {
+      "group": "Transparent machine semantics",
+      "id": "CCW-015",
+      "modifications": [],
+      "origin_node_id": "c4c94726-3cc7-4df6-b779-72bbf9c06f40",
+      "origin_node_name": "Development Workflow",
+      "statement": "When writing Markdown links to repository-local files or directories, keep the real filesystem path as the semantic source of truth but percent-encode the Markdown link destination as a URI path instead of embedding raw spaces or Markdown/URL-sensitive path characters.",
+      "title": "Render repository-local Markdown links URL-safely",
+      "why": "Valid repository filenames can contain spaces, `#`, `%`, parentheses and other characters that Markdown consumers parse differently; URL-safe link destinations keep links portable across IDEs, GitHub and other renderers without forcing artificial filename restrictions."
+    },
+    {
+      "group": "Proportional verification",
+      "id": "CCW-004",
+      "modifications": [],
+      "origin_node_id": "c4c94726-3cc7-4df6-b779-72bbf9c06f40",
+      "origin_node_name": "Development Workflow",
+      "statement": "For one coherent correction block, make the related authoring/code changes and run proportionate focused checks first; do not repeat the project's most expensive generated-output, integration, packaging, or full verification cycle after every micro-edit.",
+      "title": "Batch related edits before expensive final verification",
+      "why": "Final verification is valuable, but repeating it on superseded intermediate heads adds ceremony without increasing confidence in the candidate that will actually be reviewed or merged."
+    },
+    {
+      "group": "Proportional verification",
+      "id": "CCW-009",
+      "modifications": [],
+      "origin_node_id": "c4c94726-3cc7-4df6-b779-72bbf9c06f40",
+      "origin_node_name": "Development Workflow",
+      "statement": "When the project owner explicitly approves a coherent implementation scope and says intermediate product review is unnecessary, mark the Fast Track as active in the durable PLAN with its scope and exit condition, keep recovery checkpoints and focused verification inside bounded work blocks, and defer repeated PR-description polish, full CI, generated-output regeneration, and other review ceremony until the coherent review candidate. When the Fast Track ends, record that closure before returning to ordinary review cadence.",
+      "title": "Use owner-approved Fast Track blocks without weakening the final gate",
+      "why": "Explicit delegation can remove intermediate coordination cost without sacrificing recoverability. Visible start/scope/exit/closure boundaries prevent a long single-worker Fast Track from becoming undocumented process state, while final human review and exact-head merge verification remain unchanged."
+    },
+    {
+      "group": "Proportional verification",
+      "id": "CCW-005",
+      "modifications": [],
+      "origin_node_id": "c4c94726-3cc7-4df6-b779-72bbf9c06f40",
+      "origin_node_name": "Development Workflow",
+      "statement": "A coherent development block may be presented for project-owner review while understood and disclosed CI failures or generated drift remain. After explicit project-owner approval and before merging, require the exact current head to pass the project's complete merge-gate verification, including zero generated drift when generated canonical output is part of the project contract.",
+      "title": "Require exact-head green verification at the merge gate, not the first review gate",
+      "why": "Human review should happen before spending finalization effort on a candidate that may still change, while the accepted branch remains protected by a strict reproducibility gate."
+    },
+    {
+      "group": "Proportional verification",
+      "id": "CCW-013",
+      "modifications": [],
+      "origin_node_id": "c4c94726-3cc7-4df6-b779-72bbf9c06f40",
+      "origin_node_name": "Development Workflow",
+      "statement": "When actively testing an installable Python tool from a development checkout, prefer one editable install (`uv tool install --editable .`) and pull subsequent revisions with Git rather than reinstalling each version, when the environment supports it.",
+      "title": "Prefer editable installs for repeated owner testing",
+      "why": "This keeps the owner-test loop short and makes the tested command follow the current checkout."
+    },
+    {
+      "group": "Proportional verification",
+      "id": "CCW-014",
+      "modifications": [],
+      "origin_node_id": "c4c94726-3cc7-4df6-b779-72bbf9c06f40",
+      "origin_node_name": "Development Workflow",
+      "statement": "When an executable tool is tested from a changing Git checkout, keep its release version stable until a real release/version boundary, but make runtime version output identify the current VCS state with the branch/ref when available, commit identity, and dirty state. Treat the commit identity as authoritative and the branch/ref as human orientation; release artifacts without checkout metadata still report the canonical release version.",
+      "title": "Expose development provenance without micro-bumping releases",
+      "why": "Humans and agents must be able to distinguish different development code behind the same release baseline without turning every branch, documentation edit, or review iteration into release-version ceremony."
+    },
+    {
+      "group": "Human review gate",
+      "id": "CCW-011",
+      "modifications": [],
+      "origin_node_id": "c4c94726-3cc7-4df6-b779-72bbf9c06f40",
+      "origin_node_name": "Development Workflow",
+      "statement": "Applicable Context constrains a task; it does not silently expand its writable scope.",
+      "title": "Expand change scope explicitly",
+      "why": "A local task must not acquire wider impact merely because broader Context was loaded."
+    },
+    {
+      "group": "Human review gate",
+      "id": "CCW-006",
+      "modifications": [],
+      "origin_node_id": "c4c94726-3cc7-4df6-b779-72bbf9c06f40",
+      "origin_node_name": "Development Workflow",
+      "statement": "Keep a review PR or equivalent change set open until the project owner explicitly approves the reviewed result.",
+      "title": "Do not merge without explicit project-owner approval",
+      "why": "Green automation proves only the properties it checks; it does not prove that the product, architecture, or documentation is acceptable to its human owner."
+    },
+    {
+      "group": "Accepted baseline",
+      "id": "CCW-008",
+      "modifications": [],
+      "origin_node_id": "c4c94726-3cc7-4df6-b779-72bbf9c06f40",
+      "origin_node_name": "Development Workflow",
+      "statement": "After a reviewed change is successfully merged into the accepted branch, reconcile the durable repository state that records the accepted baseline before starting the next coherent development block. Record the merge outcome in `PLAN.md`, update `STATE.md` or equivalent current-state documentation, and refresh README/CHANGELOG or review-status wording made stale by the merge when applicable.",
+      "title": "Close the post-merge baseline checkpoint before new development",
+      "why": "The merge itself creates project facts after the merge candidate was frozen. Without a post-merge checkpoint, the accepted code can be correct while recovery documentation still describes the pre-merge state."
+    },
+    {
+      "group": "Development infrastructure",
+      "id": "GH-001",
+      "modifications": [],
+      "origin_node_id": "ccf4d7ee-4db1-4110-9ddc-5d70c69cf2bc",
+      "origin_node_name": "GitHub",
+      "statement": "Manage workflow Issues, Pull Requests, reviews, checks/CI status, and merge state in the project's GitHub repository. Branches and commits remain ordinary Git objects; when a capable local harness is available, edit and test the local working tree directly rather than treating GitHub file APIs as a substitute filesystem.",
+      "title": "Use GitHub development objects",
+      "why": "The workflow should use standard GitHub semantics and tools while local code work stays local when possible."
+    },
     {
       "group": "Onboarding placement",
       "id": "ONB-B97F676A25A3",
@@ -83,6 +280,47 @@
     }
   ],
   "schema": "contextcanon/package/v4",
-  "sources": [],
-  "topics": []
+  "sources": [
+    {
+      "id": "ccf4d7ee-4db1-4110-9ddc-5d70c69cf2bc",
+      "name": "GitHub",
+      "normalized_digest": "3efd3dfdfec720e048fb84df4db4f0d1ed86f1a9f5486314a482789c1bd2850b",
+      "package_digest": "3e0883cbf8e963f29c028af8a73bcbe87123d7328b5b797c273d4faa38d5e3b9",
+      "relationship": "parent",
+      "version": "0.1.8-draft",
+      "why": null
+    }
+  ],
+  "topics": [
+    {
+      "condition": "When planning, resuming, checkpointing, reviewing, testing, finalizing, merging, or closing the accepted baseline for a coherent development block:",
+      "id": "CCW-TOPIC-CHANGE-WORKFLOW",
+      "origin_node_id": "c4c94726-3cc7-4df6-b779-72bbf9c06f40",
+      "origin_node_name": "Development Workflow",
+      "targets": [
+        {
+          "intent": "required",
+          "kind": "resource",
+          "locator": "CONTEXT/references/ne68be75ed7bf392/docs/change-workflow.md",
+          "resource_id": "RESOURCE-AF854839DFA0"
+        }
+      ],
+      "title": "Executing a development block"
+    },
+    {
+      "condition": "When adding or changing `--version`, package version lookup, or Git checkout provenance for an executable Python tool:",
+      "id": "CCW-TOPIC-VERSION-PROVENANCE",
+      "origin_node_id": "c4c94726-3cc7-4df6-b779-72bbf9c06f40",
+      "origin_node_name": "Development Workflow",
+      "targets": [
+        {
+          "intent": "required",
+          "kind": "resource",
+          "locator": "CONTEXT/references/ne68be75ed7bf392/docs/version-provenance-python.md",
+          "resource_id": "RESOURCE-7C6F7E4D126B"
+        }
+      ],
+      "title": "Implementing executable version identity"
+    }
+  ]
 }

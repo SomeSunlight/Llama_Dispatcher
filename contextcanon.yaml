@@ -4,7 +4,13 @@ repositories:
     kind: git
     location: https://github.com/SomeSunlight/context-canon.git
     ref: main
+  context-canon-2:
+    kind: local
+    location: ../../Users/u239230/PycharmProjects/context-canon
 sources:
   4ca9d92c-59f2-4b1f-b7b3-0e2ff91fd001:
     repository: context-canon
     path: nodes/library/foundation
+  ccf4d7ee-4db1-4110-9ddc-5d70c69cf2bc:
+    repository: context-canon-2
+    path: nodes/library/github

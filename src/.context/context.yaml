@@ -9,7 +9,7 @@ compiler_version: "0.8.0"
 node:
   id: "5a5bf4f7-2cdd-4c35-90bb-4195d9759e5a"
   name: "Dispatcher Code"
-  version: "0.1.1-draft"
+  version: "0.1.2-draft"
 
 # Accepted semantic Parent packages. Locators are discovery metadata; build uses only exact pins.
 parents: []
@@ -18,22 +18,32 @@ parents: []
 sources:
   - id: "e3e6391b-6eb7-4b2a-ba1d-f969a65bbf08"
     name: "Llama Dispatcher"
-    version: "0.1.2-draft"
+    version: "0.1.3-draft"
     relationship: "parent"
     locator: ".."
-    normalized_digest: "ef5444bb73d49f4914fe680cedc8ad0679da599ed4c7ef68ca910be9969620fa"
-    package_digest: "21c98f31b5b1bb1c552f6a1c1a1cdeb853ad2f899ddb37db6e66b0aa678bcb4f"
+    normalized_digest: "3f07a13d6691257ea4130a87196de01ce0ad72e0fb7dfb9d93d9c6a17125e035"
+    package_digest: "e2c2f27cdcb9c4526087e9fd5256de6d431074db9886134329a471ec2a6bfebc"
 
 # Direct informational References. Their Rules are not effective and they are not exported to Children.
 references: []
 
 # Effective normative imported Context origins, flattened through Parent relationships only.
 imports:
+  - id: "c4c94726-3cc7-4df6-b779-72bbf9c06f40"
+    name: "Development Workflow"
+    version: "0.3.7-draft"
+    normalized_digest: "c63c332918c6f2209abac5be453342d07b10c52fb3a21022f7ad25ab7ea8860b"
+    package_digest: "04e53389249e34b248b18c80df0adf1767261285c8a152df418b69720a83f731"
+  - id: "ccf4d7ee-4db1-4110-9ddc-5d70c69cf2bc"
+    name: "GitHub"
+    version: "0.1.8-draft"
+    normalized_digest: "3efd3dfdfec720e048fb84df4db4f0d1ed86f1a9f5486314a482789c1bd2850b"
+    package_digest: "3e0883cbf8e963f29c028af8a73bcbe87123d7328b5b797c273d4faa38d5e3b9"
   - id: "e3e6391b-6eb7-4b2a-ba1d-f969a65bbf08"
     name: "Llama Dispatcher"
-    version: "0.1.2-draft"
-    normalized_digest: "ef5444bb73d49f4914fe680cedc8ad0679da599ed4c7ef68ca910be9969620fa"
-    package_digest: "21c98f31b5b1bb1c552f6a1c1a1cdeb853ad2f899ddb37db6e66b0aa678bcb4f"
+    version: "0.1.3-draft"
+    normalized_digest: "3f07a13d6691257ea4130a87196de01ce0ad72e0fb7dfb9d93d9c6a17125e035"
+    package_digest: "e2c2f27cdcb9c4526087e9fd5256de6d431074db9886134329a471ec2a6bfebc"
 
 # Elements authored in this Node's CONTEXT.src.md.
 local:
@@ -64,6 +74,22 @@ local:
 # Compiled effective Rule/Topic view with provenance.
 official:
   rules:
+    - {"id": "CCW-010", "title": "Back every change with an Issue", "origin_node_id": "c4c94726-3cc7-4df6-b779-72bbf9c06f40", "origin_node_name": "Development Workflow", "local": false, "overrides": []}
+    - {"id": "CCW-001", "title": "Plan a coherent change block before editing", "origin_node_id": "c4c94726-3cc7-4df6-b779-72bbf9c06f40", "origin_node_name": "Development Workflow", "local": false, "overrides": []}
+    - {"id": "CCW-002", "title": "Checkpoint completed plan items immediately", "origin_node_id": "c4c94726-3cc7-4df6-b779-72bbf9c06f40", "origin_node_name": "Development Workflow", "local": false, "overrides": []}
+    - {"id": "CCW-003", "title": "Keep recovery-critical knowledge in the repository", "origin_node_id": "c4c94726-3cc7-4df6-b779-72bbf9c06f40", "origin_node_name": "Development Workflow", "local": false, "overrides": []}
+    - {"id": "CCW-007", "title": "Resume recent explicit continuation without re-proving unchanged state", "origin_node_id": "c4c94726-3cc7-4df6-b779-72bbf9c06f40", "origin_node_name": "Development Workflow", "local": false, "overrides": []}
+    - {"id": "CCW-012", "title": "Mark machine-significant Markdown explicitly", "origin_node_id": "c4c94726-3cc7-4df6-b779-72bbf9c06f40", "origin_node_name": "Development Workflow", "local": false, "overrides": []}
+    - {"id": "CCW-015", "title": "Render repository-local Markdown links URL-safely", "origin_node_id": "c4c94726-3cc7-4df6-b779-72bbf9c06f40", "origin_node_name": "Development Workflow", "local": false, "overrides": []}
+    - {"id": "CCW-004", "title": "Batch related edits before expensive final verification", "origin_node_id": "c4c94726-3cc7-4df6-b779-72bbf9c06f40", "origin_node_name": "Development Workflow", "local": false, "overrides": []}
+    - {"id": "CCW-009", "title": "Use owner-approved Fast Track blocks without weakening the final gate", "origin_node_id": "c4c94726-3cc7-4df6-b779-72bbf9c06f40", "origin_node_name": "Development Workflow", "local": false, "overrides": []}
+    - {"id": "CCW-005", "title": "Require exact-head green verification at the merge gate, not the first review gate", "origin_node_id": "c4c94726-3cc7-4df6-b779-72bbf9c06f40", "origin_node_name": "Development Workflow", "local": false, "overrides": []}
+    - {"id": "CCW-013", "title": "Prefer editable installs for repeated owner testing", "origin_node_id": "c4c94726-3cc7-4df6-b779-72bbf9c06f40", "origin_node_name": "Development Workflow", "local": false, "overrides": []}
+    - {"id": "CCW-014", "title": "Expose development provenance without micro-bumping releases", "origin_node_id": "c4c94726-3cc7-4df6-b779-72bbf9c06f40", "origin_node_name": "Development Workflow", "local": false, "overrides": []}
+    - {"id": "CCW-011", "title": "Expand change scope explicitly", "origin_node_id": "c4c94726-3cc7-4df6-b779-72bbf9c06f40", "origin_node_name": "Development Workflow", "local": false, "overrides": []}
+    - {"id": "CCW-006", "title": "Do not merge without explicit project-owner approval", "origin_node_id": "c4c94726-3cc7-4df6-b779-72bbf9c06f40", "origin_node_name": "Development Workflow", "local": false, "overrides": []}
+    - {"id": "CCW-008", "title": "Close the post-merge baseline checkpoint before new development", "origin_node_id": "c4c94726-3cc7-4df6-b779-72bbf9c06f40", "origin_node_name": "Development Workflow", "local": false, "overrides": []}
+    - {"id": "GH-001", "title": "Use GitHub development objects", "origin_node_id": "ccf4d7ee-4db1-4110-9ddc-5d70c69cf2bc", "origin_node_name": "GitHub", "local": false, "overrides": []}
     - {"id": "ONB-B97F676A25A3", "title": "Keep configuration in its owning layer", "origin_node_id": "e3e6391b-6eb7-4b2a-ba1d-f969a65bbf08", "origin_node_name": "Llama Dispatcher", "local": false, "overrides": []}
     - {"id": "ONB-D855038AE157", "title": "Configuration precedence", "origin_node_id": "e3e6391b-6eb7-4b2a-ba1d-f969a65bbf08", "origin_node_name": "Llama Dispatcher", "local": false, "overrides": []}
     - {"id": "ONB-BEC5C7AA7DF9", "title": "Use uv for project dependency and execution workflows", "origin_node_id": "e3e6391b-6eb7-4b2a-ba1d-f969a65bbf08", "origin_node_name": "Llama Dispatcher", "local": false, "overrides": []}
@@ -88,11 +114,23 @@ official:
     - {"id": "ONB-67CE0D860DA2", "title": "Future schema evolution safeguards", "origin_node_id": "5a5bf4f7-2cdd-4c35-90bb-4195d9759e5a", "origin_node_name": "Dispatcher Code", "local": true, "overrides": []}
     - {"id": "ONB-1BE2684D2D39", "title": "Store canonical DB keys and OpenAI JSON keys", "origin_node_id": "5a5bf4f7-2cdd-4c35-90bb-4195d9759e5a", "origin_node_name": "Dispatcher Code", "local": true, "overrides": []}
   removed_rules: []
-  topic_ids: ["ONB-5CDAC841D567"]
+  topic_ids: ["CCW-TOPIC-CHANGE-WORKFLOW", "CCW-TOPIC-VERSION-PROVENANCE", "ONB-5CDAC841D567"]
   resource_root: "CONTEXT/"
 
 # Topic edges are explicit: kind is resource or context-node; intent is required or optional.
 targets:
+  - topic: "CCW-TOPIC-CHANGE-WORKFLOW"
+    intent: "required"
+    kind: "resource"
+    locator: "CONTEXT/references/ne68be75ed7bf392/docs/change-workflow.md"
+    target_node_id: null
+    target_node_name: null
+  - topic: "CCW-TOPIC-VERSION-PROVENANCE"
+    intent: "required"
+    kind: "resource"
+    locator: "CONTEXT/references/ne68be75ed7bf392/docs/version-provenance-python.md"
+    target_node_id: null
+    target_node_name: null
   - topic: "ONB-5CDAC841D567"
     intent: "required"
     kind: "resource"
@@ -104,8 +142,10 @@ targets:
 resources:
   - {"source": "../CONTEXT.md", "published": "CONTEXT/references/n7a3bd8b0815855d/CONTEXT.md"}
   - {"source": "../README.md", "published": "CONTEXT/references/n7a3bd8b0815855d/README.md"}
+  - {"source": null, "published": "CONTEXT/references/ne68be75ed7bf392/docs/change-workflow.md"}
+  - {"source": null, "published": "CONTEXT/references/ne68be75ed7bf392/docs/version-provenance-python.md"}
 
 # Exact deterministic identities. package_digest covers CONTEXT.md plus CONTEXT/ resources.
 package:
-  normalized_digest: "84059d150dbac284f37771223ad02b45f08ab24116960dab9c1e4a844eef1dee"
-  package_digest: "9f375b7647238fba7d4b6361c85b75813351510a8097e0741d721bf93413a6e5"
+  normalized_digest: "389520b582a165707c449bd560ef2efb800fe33e98e6260522c4b7e0f4c6b13a"
+  package_digest: "c9757fb0359047c238a222ae1e4187484ed3595f7de05817e48c8125ed388080"

@@ -1,0 +1,25 @@
+{
+  "resources": [
+    {
+      "node_id": "5a5bf4f7-2cdd-4c35-90bb-4195d9759e5a",
+      "path": "CONTEXT/references/n7a3bd8b0815855d/CONTEXT.md",
+      "repo_path": "CONTEXT.md"
+    },
+    {
+      "node_id": "5a5bf4f7-2cdd-4c35-90bb-4195d9759e5a",
+      "path": "CONTEXT/references/n7a3bd8b0815855d/README.md",
+      "repo_path": "README.md"
+    },
+    {
+      "node_id": "c4c94726-3cc7-4df6-b779-72bbf9c06f40",
+      "path": "CONTEXT/references/ne68be75ed7bf392/docs/change-workflow.md",
+      "repo_path": "nodes/library/development-workflow/docs/change-workflow.md"
+    },
+    {
+      "node_id": "c4c94726-3cc7-4df6-b779-72bbf9c06f40",
+      "path": "CONTEXT/references/ne68be75ed7bf392/docs/version-provenance-python.md",
+      "repo_path": "nodes/library/development-workflow/docs/version-provenance-python.md"
+    }
+  ],
+  "schema": "contextcanon/resource-origins/v1"
+}
