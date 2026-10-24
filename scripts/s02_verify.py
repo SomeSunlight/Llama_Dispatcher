@@ -9,6 +9,7 @@ test Dispatcher; it never takes over an existing listener.
 from __future__ import annotations
 
 import argparse
+from collections import deque
 import hashlib
 import json
 import os
@@ -188,6 +189,35 @@ def load_start(instance: str, url: str) -> list[str]:
     return command
 
 
+def dispatcher_log_path(instance: str) -> Path:
+    """A durable, private, unique log path per explicit local S02 test run."""
+    require(bool(_INSTANCE_RE.fullmatch(instance)), "Invalid instance name.")
+    folder = ROOT / "reports"
+    folder.mkdir(parents=True, exist_ok=True)
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
+    return folder / f"s02-{instance}.dispatcher-{stamp}-{os.getpid()}.log"
+
+
+def log_tail(path: Path, *, max_lines: int = 30, max_chars: int = 320) -> str:
+    """Print a useful bounded excerpt; do not echo obvious secret headers."""
+    if not path.is_file():
+        return "(Dispatcher log file is missing.)"
+    with path.open("r", encoding="utf-8", errors="replace") as stream:
+        lines = deque(stream, maxlen=max_lines)
+    if not lines:
+        return "(Dispatcher produced no output before exiting.)"
+    safe = []
+    for line in lines:
+        value = line.rstrip("\r\n")[:max_chars]
+        value = re.sub(
+            r"(?i)(\b(?:authorization|api[-_]?key|token|password|secret)\b"
+            r"\s*[:=]\s*(?:Bearer\s+)?)[^\s,;]+",
+            r"\1<redacted>", value,
+        )
+        safe.append(value)
+    return "\n".join(safe)
+
+
 def http_json(url: str, route: str, token: str | None = None,
               body: dict | None = None, timeout: int = 15) -> tuple[int, dict]:
     raw = json.dumps(body).encode() if body is not None else None
@@ -291,7 +321,9 @@ def wait_for_server(url: str, proc: subprocess.Popen, token: str,
     until = time.monotonic() + timeout
     while time.monotonic() < until:
         if proc.poll() is not None:
-            raise CheckError("Test Dispatcher exited during startup; inspect its local process log.")
+            raise CheckError(
+                f"Test Dispatcher exited during startup (exit code {proc.returncode})."
+            )
         if is_listening(url):
             try:
                 status, data = http_json(url, "/v1/models", token, timeout=3)
@@ -384,25 +416,39 @@ def main() -> int:
                     "Port is occupied: stop your EXISTING *test* Dispatcher yourself. "
                     "This script will never take over another process.")
             backup_old_database(args.instance)
+            log_path = dispatcher_log_path(args.instance)
+            print(f"  Dispatcher console log: {log_path}", flush=True)
             with tempfile.TemporaryDirectory(prefix="s02-private-") as folder:
                 directory = Path(folder)
                 tokens = auth_fixture(directory)
                 env = os.environ.copy()
                 env["DISPATCHER_CLIENT_CONFIG"] = str(directory / "clients.json")
-                with (directory / "dispatcher.log").open("w", encoding="utf-8") as log:
-                    proc = subprocess.Popen(command, cwd=ROOT, env=env,
-                            stdin=subprocess.DEVNULL, stdout=log, stderr=subprocess.STDOUT,
-                            creationflags=subprocess.CREATE_NEW_PROCESS_GROUP if os.name == "nt" else 0,
-                            start_new_session=os.name != "nt")
-                    try:
-                        wait_for_server(url, proc, tokens["goose"])
-                        verify_identity(url, tokens, args.inference)
-                        if args.inference:
-                            verify_sqlite(args.instance, require_clients=True)
-                        else:
-                            verify_sqlite(args.instance, require_clients=False)
-                    finally:
-                        stop_our_process(proc, url, tokens["goose"])
+                # Python stdout is fully buffered when redirected to a file;
+                # force immediate logging, especially for fast startup crashes.
+                env["PYTHONUNBUFFERED"] = "1"
+                env["PYTHONIOENCODING"] = "utf-8"
+                try:
+                    with log_path.open("x", encoding="utf-8") as log:
+                        proc = subprocess.Popen(command, cwd=ROOT, env=env,
+                                stdin=subprocess.DEVNULL, stdout=log, stderr=subprocess.STDOUT,
+                                creationflags=subprocess.CREATE_NEW_PROCESS_GROUP if os.name == "nt" else 0,
+                                start_new_session=os.name != "nt")
+                        try:
+                            wait_for_server(url, proc, tokens["goose"])
+                            verify_identity(url, tokens, args.inference)
+                            if args.inference:
+                                verify_sqlite(args.instance, require_clients=True)
+                            else:
+                                verify_sqlite(args.instance, require_clients=False)
+                        finally:
+                            stop_our_process(proc, url, tokens["goose"])
+                except Exception:
+                    # After the child has exited, the log handle is closed and
+                    # its last lines are available even on Windows.
+                    print("  Dispatcher log — last 30 lines:", file=sys.stderr)
+                    print(log_tail(log_path), file=sys.stderr)
+                    print(f"  Full local log: {log_path}", file=sys.stderr)
+                    raise
             print("  Test Dispatcher: stopped (only the process started by this script)")
         else:
             require(is_listening(url),
