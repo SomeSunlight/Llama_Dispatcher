@@ -1201,7 +1201,19 @@ class LlamaOrchestrator:
 
                 uptime = asyncio.get_event_loop().time() - start_time
                 if uptime < 15.0:
-                    print(f"\n[FATAL] Server crashed immediately on startup ({uptime:.1f}s). Aborting.")
+                    # Windows native errors may only surface as a process exit
+                    # status, e.g. 0xC0000135 for a missing runtime DLL.
+                    # Keep the legacy fatal boundary; add non-secret diagnostics.
+                    exit_code = self.current_process.returncode
+                    hex_code = (
+                        f" (0x{exit_code & 0xFFFFFFFF:08X})"
+                        if os.name == "nt" and isinstance(exit_code, int) else ""
+                    )
+                    print(
+                        f"\n[FATAL] Server crashed immediately on startup "
+                        f"({uptime:.1f}s); llama-server exit code: "
+                        f"{exit_code}{hex_code}. Aborting.", flush=True
+                    )
                     self.is_running = False
                     os._exit(1)
                 else:
