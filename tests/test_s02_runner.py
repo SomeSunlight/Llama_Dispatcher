@@ -90,6 +90,38 @@ class OwnerRunnerTests(unittest.TestCase):
             )
             self.assertEqual(result.returncode, 0, result.stderr.decode(errors="replace"))
 
+    def test_manual_auth_flow_never_starts_processes_or_commits_raw_tokens(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            with (patch.object(runner, "ROOT", root),
+                  patch.object(runner, "is_listening", return_value=False)):
+                with patch.object(runner.subprocess, "Popen",
+                                  side_effect=AssertionError("Must never launch")):
+                    runner.prepare_manual("Laptop_Win", runner.DEFAULT_URL)
+                config_path, secret_path = runner.manual_fixture_paths("Laptop_Win")
+                self.assertTrue(config_path.exists())
+                self.assertTrue(secret_path.exists())
+                keys = runner.load_manual("Laptop_Win", runner.DEFAULT_URL)
+                self.assertEqual(set(keys), {"goose", "open-webui"})
+                config = json.loads(config_path.read_text(encoding="utf-8"))
+                for k in keys.values():
+                    self.assertNotIn(k, json.dumps(config))
+                with self.assertRaises(runner.CheckError):
+                    runner.prepare_manual("Laptop_Win", runner.DEFAULT_URL)
+                with self.assertRaises(runner.CheckError):
+                    runner.load_manual("Laptop_Win", "http://127.0.0.1:8002")
+                runner.cleanup_manual("Laptop_Win")
+                self.assertFalse(secret_path.exists())
+                self.assertFalse(config_path.exists())
+
+    def test_manual_prepare_refuses_to_touch_an_existing_listener(self):
+        with tempfile.TemporaryDirectory() as folder:
+            with (patch.object(runner, "ROOT", Path(folder)),
+                  patch.object(runner, "is_listening", return_value=True)):
+                with self.assertRaises(runner.CheckError):
+                    runner.prepare_manual("Laptop_Win", runner.DEFAULT_URL)
+                self.assertFalse(runner.manual_fixture_paths("Laptop_Win")[0].exists())
+
     def test_dispatcher_logs_are_unique_persistent_and_bounded(self):
         with tempfile.TemporaryDirectory() as temp:
             with patch.object(runner, "ROOT", Path(temp)):
