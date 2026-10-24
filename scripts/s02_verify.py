@@ -218,6 +218,21 @@ def log_tail(path: Path, *, max_lines: int = 30, max_chars: int = 320) -> str:
     return "\n".join(safe)
 
 
+def replay_with_test_python(captured: list[str], instance: str) -> list[str]:
+    """Use the Python environment that passed S02 unit tests.
+
+    Process introspection can capture the *system* Python executable of an
+    existing Dispatcher, while `uv run --frozen python` gives this runner a
+    correctly provisioned virtualenv. Reusing the system executable would
+    fail to import installed dependencies (e.g. PyYAML). Keep the captured
+    script and flags verbatim, changing ONLY the interpreter executable.
+    """
+    check_command(captured, instance)
+    current = Path(sys.executable).resolve()
+    require(current.is_file(), "The current test Python interpreter is missing.")
+    return [str(current), *captured[1:]]
+
+
 def http_json(url: str, route: str, token: str | None = None,
               body: dict | None = None, timeout: int = 15) -> tuple[int, dict]:
     raw = json.dumps(body).encode() if body is not None else None
@@ -411,7 +426,9 @@ def main() -> int:
         require(args.start or not args.inference,
                 "--inference requires --start to verify both temporary clients.")
         if args.start:
-            command = load_start(args.instance, url)
+            captured = load_start(args.instance, url)
+            command = replay_with_test_python(captured, args.instance)
+            print(f"  Dispatcher test Python: {command[0]}")
             require(not is_listening(url),
                     "Port is occupied: stop your EXISTING *test* Dispatcher yourself. "
                     "This script will never take over another process.")
