@@ -21,7 +21,10 @@ uv run --frozen python scripts/s02_verify.py --instance Laptop_Win --save-start
 
 Das Programm liest das tatsächliche Startkommando aus dem lokalen
 Betriebssystem und speichert die Einstellungen **nur auf diesem Rechner** in
-`reports/s02-Laptop_Win.launch.json`. Diese Datei ist Git-ignoriert,
+`reports/s02-Laptop_Win.launch.json`. Beim späteren Teststart verwendet es
+jedoch **denselben Python-Interpreter wie `uv run --frozen`**; nur die erfassten
+Dispatcher-Argumente werden übernommen. Dadurch werden die Projektbibliotheken
+wie PyYAML zuverlässig gefunden. Diese Datei ist Git-ignoriert,
 enthält lokale Startpfade und muss normalerweise nie bearbeitet werden.
 Das Programm startet oder beendet dabei **nichts**.
 
