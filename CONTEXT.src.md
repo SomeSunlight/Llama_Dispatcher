@@ -11,9 +11,6 @@
 ## Sources
 
 <!-- contextcanon-placement-sources:start -->
-- [GitHub](contextcanon.yaml) — `0.1.8-draft`
-  Why: Use the GitHub provider for the project's github.com development workflow; it inherits Development Workflow without unrelated ContextCanon Foundation governance.
-  <!-- ctx:source id="ccf4d7ee-4db1-4110-9ddc-5d70c69cf2bc" version="0.1.8-draft" -->
 <!-- contextcanon-placement-sources:end -->
 
 ## Local Rules
