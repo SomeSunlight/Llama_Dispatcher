@@ -1,5 +1,62 @@
 # S02 — Kurztest auf Laptop / Windows
 
+## Empfohlen für Laptop/Windows mit SYCL: normaler PowerShell-Start
+
+Der native `llama-server.exe` ist beim automatischen `--start`-Test mit
+Windows `0xC0000135` (fehlende DLL) abgestürzt, funktioniert aber mit deinem
+bekannten PowerShell-Startkommando. Darum können wir Authentifizierung und
+Inferenz **ohne automatisches Starten durch Python** prüfen. Das ist auch
+näher an der künftigen Attach-/Prozessmanager-Architektur.
+
+**1. Der alte Testdispatcher ist beendet.** Im Projektverzeichnis:
+
+```powershell
+uv run --frozen python scripts/s02_verify.py --instance Laptop_Win --prepare-manual
+```
+
+Das Skript erzeugt zwei lokale Einmal-Testtokens und zeigt eine einzelne
+`$env:DISPATCHER_CLIENT_CONFIG = '...'`-Zeile.
+
+**2. In der normalen PowerShell 7** diese angezeigte Zeile ausführen und
+den Dispatcher **wie immer** starten:
+
+```powershell
+uv run src/dispatcher.py serve --ensemble thinkpad-sycl-gemma_26B --instance Laptop_Win --model-root c:\AI_Models\LLM\GGUF_Raw
+```
+
+Keine Änderungen an SYCL, PATH oder den llama.cpp-Dateien. Laufen lassen.
+
+**3. Im zweiten PowerShell-Terminal** den vollständigen Test durchführen:
+
+```powershell
+uv run --frozen python scripts/s02_verify.py --instance Laptop_Win --verify-manual --inference
+```
+
+Geprüft werden zwei getrennte simulierte Clients, Zugriffskontrollen,
+Parameterregeln, winzige echte Modellanfragen und die Einträge in SQLite v9.
+Das Skript startet oder beendet dabei **keinen** Prozess.
+
+Anschliessend den Dispatcher selbst mit Ctrl+C beenden und die lokalen
+Einmal-Testschlüssel entfernen:
+
+```powershell
+uv run --frozen python scripts/s02_verify.py --instance Laptop_Win --cleanup-manual
+```
+
+Die Einmal-Testschlüssel liegen bis dahin lokal in zwei Git-ignorierten Dateien
+unter `reports/` (darunter eine Datei mit **rohen**, kurzlebigen Tokens).
+Nicht hochladen oder in Git aufnehmen. Das Skript überschreibt diese Dateien
+nicht ohne vorherige Bereinigung; bestehende `C:\llama.cpp\clients.json` bleibt
+unverändert. Im PowerShell-Terminal nach dem Test die Variable optional entfernen
+mit `Remove-Item Env:DISPATCHER_CLIENT_CONFIG`.
+
+**Automatischer Start `--start --inference` bleibt optional** für nichtproduktive
+Testinstanzen ohne solche Windows-/SYCL-Unterschiede. Der bekannte Fehler
+`0xC0000135` wird damit nicht als gelöst ausgegeben: Der neue Testpfad
+umgeht lediglich den abweichenden Test-Launcher.
+
+---
+
 ## Wozu?
 
 Wir prüfen zwei **simulierte** Clients (Goose und Open WebUI):
