@@ -135,7 +135,8 @@ class StrataBackend:
 
     def headers(self) -> dict[str, str]:
         """Native credential only. Never relay a client token, cookie or trust header."""
-        return {"authorization": f"Bearer {self._credential}", "content-type": "application/json"}
+        return {"authorization": f"Bearer {self._credential}", "content-type": "application/json",
+                "accept-encoding": "identity"}
 
     def new_client(self) -> httpx.AsyncClient:
         return httpx.AsyncClient(
@@ -284,6 +285,9 @@ class StrataBackend:
         }
         if "retry-after" in upstream.headers:
             response_headers["retry-after"] = upstream.headers["retry-after"]
+        if "content-encoding" in upstream.headers:
+            # Raw SSE bytes must retain their matching content encoding.
+            response_headers["content-encoding"] = upstream.headers["content-encoding"]
 
         if not is_stream or upstream.status_code >= 400:
             try:
