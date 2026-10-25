@@ -1683,6 +1683,18 @@ async def debug_config():
     })
 
 
+@app.get("/debug/strata")
+async def debug_strata():
+    """Read-only capability probe of an existing externally managed Strata endpoint."""
+    assert orchestrator is not None
+    attached = getattr(orchestrator, "strata_attach", None)
+    if attached is None:
+        return JSONResponse({"error": "No Strata endpoint attached."}, status_code=404)
+    observed = await attached.probe()
+    return JSONResponse({"backend": "strata", "ownership": "attached", **observed},
+                        status_code=200 if observed["available"] else 503)
+
+
 @app.post("/debug/preview")
 async def debug_preview(request: Request):
     """
