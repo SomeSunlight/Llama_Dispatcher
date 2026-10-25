@@ -124,9 +124,9 @@ class StrataBackend:
             ctk = params.get("chat_template_kwargs")
             if ctk is not None and not isinstance(ctk, dict):
                 raise StrataConfigurationError("chat_template_kwargs must be an object.")
-            if ctk is not None and any(not isinstance(k, str) or
-                                       not isinstance(v, (str, bool, int, float, type(None)))
-                                       for k, v in ctk.items()):
+            if ctk is not None and (not set(ctk) <= {"enable_thinking", "preserve_thinking", "reasoning_effort", "thinking_budget"} or
+                                    any(not isinstance(v, (str, bool, int, float, type(None)))
+                                        for v in ctk.values())):
                 raise StrataConfigurationError("Invalid chat_template_kwargs values.")
             if "reasoning_effort" in params and isinstance(ctk, dict) and "enable_thinking" in ctk:
                 raise StrataConfigurationError("Do not combine reasoning_effort and enable_thinking.")
