@@ -104,6 +104,18 @@ class ConfigurationContracts(unittest.TestCase):
             backend.resolve({"model": "unknown"}, "enforce")
 
 
+class FragmentedSSE(httpx.AsyncByteStream):
+    """Mock a real transport with deliberately split SSE event boundaries."""
+
+    def __init__(self, data):
+        self.data = data
+
+    async def __aiter__(self):
+        yield self.data[:17]
+        yield self.data[17:55]
+        yield self.data[55:]
+
+
 class HttpContracts(unittest.IsolatedAsyncioTestCase):
     def setUp(self):
         self.requests = []
@@ -125,9 +137,11 @@ class HttpContracts(unittest.IsolatedAsyncioTestCase):
                 if self.streaming:
                     return httpx.Response(
                         self.status, headers={"content-type": "text/event-stream"},
-                        content=(b'data: {"choices":[{"delta":{"tool_calls":[{"index":0}]}}]}\n\n'
-                                 b'data: {"usage":{"prompt_tokens":7,"completion_tokens":3}}\n\n'
-                                 b'data: [DONE]\n\n'),
+                        stream=FragmentedSSE(
+                            b'data: {"choices":[{"delta":{"tool_calls":[{"index":0}]}}]}\n\n'
+                            b'data: {"usage":{"prompt_tokens":7,"completion_tokens":3}}\n\n'
+                            b'data: [DONE]\n\n'
+                        ),
                     )
                 return httpx.Response(
                     self.status, json={"choices": [{"finish_reason": "stop"}],
