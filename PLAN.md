@@ -1,6 +1,6 @@
 # PLAN — Multi-engine Dispatcher: attach-first, external process supervision
 
-**Planning revision:** 2026-10-25 (S02 accepted-baseline and ContextCanon migration status update; runtime design unchanged).
+**Planning revision:** 2026-10-25 (S02 and PR #25 accepted baselines recorded; runtime design unchanged).
 **Epic:** [#8](https://github.com/SomeSunlight/Llama_Dispatcher/issues/8).
 **Baseline:** S00 [#19](https://github.com/SomeSunlight/Llama_Dispatcher/issues/19) was owner-tested across three Windows/WSL installations and [PR #20](https://github.com/SomeSunlight/Llama_Dispatcher/pull/20) merged into `main` on 2026-10-19.
 **Accepted S01:** [PR #22](https://github.com/SomeSunlight/Llama_Dispatcher/pull/22) owner-tested (unit, live, SQLite and tiny streaming/nonstreaming inference) and squash-merged 2026-10-20. **Accepted S02:** [PR #23](https://github.com/SomeSunlight/Llama_Dispatcher/pull/23) squash-merged 2026-10-24. **Next implementation gate:** S03 [#11](https://github.com/SomeSunlight/Llama_Dispatcher/issues/11), pending its own scoped approval.
@@ -100,7 +100,7 @@ The issue bodies from the 2026-10-16 roadmap may still describe the **old** proc
 ## 8. How to resume safely
 
 1. The accepted S00, S01 and S02 baselines are recorded above; do not reopen them without a separately scoped issue.
-2. After the ContextCanon-only [PR #25](https://github.com/SomeSunlight/Llama_Dispatcher/pull/25) is merged and its baseline closed, take up **S03 #11** in a separate owner-reviewed implementation PR. Keep the existing Speedy Strata process and direct Caddy route as reference/fallback.
+2. With the ContextCanon-only [PR #25](https://github.com/SomeSunlight/Llama_Dispatcher/pull/25) merged and its baseline recorded, take up **S03 #11** in a separate owner-reviewed implementation PR. Keep the existing Speedy Strata process and direct Caddy route as reference/fallback.
 3. Advance telemetry, compilation and external supervisor integration in their separately approved gates, then selectively migrate instances. No forced move to an external supervisor for S03.
 
 **Next implementation gate:** S03 #11, Strata attach and authenticated proxy aliases.
@@ -114,7 +114,7 @@ This isolated context-maintenance block is tracked by [PR #25](https://github.co
 - [x] Replace machine-specific Source discovery configuration with the portable Git repository and eliminate stale Foundation discovery mappings.
 - [x] Update CI to pin the compiler supporting the accepted packages and verify all local Context Nodes.
 - [x] Confirm the review candidate passes required Windows/Linux CI, including generated ContextCanon output and zero drift; reverify the exact final head after the final checkpoint commit.
-- [ ] Obtain explicit owner approval, then squash-merge PR #25.
-- [ ] After merge, record its accepted baseline before starting the next implementation block.
+- [x] Owner approved and squash-merged PR #25 on 2026-10-25 (accepted `main` commit `c6a1a9bf4f3b1a7c5e20fdf965fc4c4a4fe5e43e`).
+- [x] Reconcile the post-merge accepted baseline in `PLAN.md`; S03 #11 is the next independently reviewed implementation block.
 
 Future ContextCanon authoring/discovery improvements and the generated project map are tracked separately in [context-canon #123](https://github.com/SomeSunlight/context-canon/issues/123) and [#124](https://github.com/SomeSunlight/context-canon/issues/124), and are not prerequisites for this PR.
