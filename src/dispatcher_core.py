@@ -1875,6 +1875,9 @@ def main():
     if CLIENT_SECURITY.enabled:
         print(f"[AUTH] Enabled for {len(CLIENT_SECURITY.clients)} configured clients.")
 
+    if args.strata_config and args.mode != "serve":
+        sys.exit("[ERROR] --strata-config is only valid with serve.")
+
     # ── Resolve instance and set global paths ─────────────────────────────────
     machine_id = "unknown"
     if args.instance:
