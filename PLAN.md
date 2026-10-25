@@ -113,7 +113,7 @@ This isolated context-maintenance block is tracked by [PR #25](https://github.co
 - [x] Adopt the exact GitHub package using ContextCanon, propagate to local Children, and regenerate/verify the context packages. Owner performed the ContextCanon-managed migration.
 - [x] Replace machine-specific Source discovery configuration with the portable Git repository and eliminate stale Foundation discovery mappings.
 - [x] Update CI to pin the compiler supporting the accepted packages and verify all local Context Nodes.
-- [ ] Confirm the final PR head passes the complete required CI and has no generated drift.
+- [x] Confirm the review candidate passes required Windows/Linux CI, including generated ContextCanon output and zero drift; reverify the exact final head after the final checkpoint commit.
 - [ ] Obtain explicit owner approval, then squash-merge PR #25.
 - [ ] After merge, record its accepted baseline before starting the next implementation block.
 
