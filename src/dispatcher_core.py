@@ -1413,7 +1413,7 @@ _SAFE_PARAMETER_KEYS = frozenset({
     "model", "stream", "temperature", "top_p", "top_k", "min_p",
     "max_tokens", "max_completion_tokens", "n", "seed", "stop",
     "presence_penalty", "frequency_penalty", "repeat_penalty",
-    "reasoning_effort", "thinking_budget", "stream_options",
+    "reasoning_effort", "reasoning_budget_tokens", "thinking_budget", "stream_options",
     "mirostat", "mirostat_tau", "mirostat_eta", "typical_p", "min_keep",
 })
 _REQUEST_CONTENT_KEYS = frozenset({
@@ -1730,8 +1730,21 @@ async def debug_preview(request: Request):
                                 status_code=400)
     else:
         forwarded, policy_injected = apply_request_policy(req_data, profile_params, policy_mode)
+    # S03: diagnostics must not reveal unknown extension fields or nested
+    # client values (which can contain arbitrary private tool/prompt material).
+    def safe_strata_preview_value(key: str, value: Any) -> Any:
+        if key == "chat_template_kwargs":
+            return _request_params_snapshot({key: value}).get(key, "<redacted>")
+        if key in _SAFE_PARAMETER_KEYS and not isinstance(value, (dict, list)):
+            return value
+        return "<redacted>"
+
     injected = {
-        k: {"from_profile": v, "client_sent": req_data.get(k)}
+        k: {
+            "from_profile": safe_strata_preview_value(k, v) if attached is not None else v,
+            "client_sent": (safe_strata_preview_value(k, req_data.get(k))
+                            if attached is not None else req_data.get(k)),
+        }
         for k, v in policy_injected.items()
     }
 
@@ -1743,11 +1756,17 @@ async def debug_preview(request: Request):
 
     # Redact content in authenticated diagnostics; preserve legacy S00 preview
     # until a deliberate client migration is accepted.
-    safe_forwarded = (
-        {k: ("<redacted>" if k.lower() in _REQUEST_CONTENT_KEYS else v)
-         for k, v in forwarded.items()}
-        if CLIENT_SECURITY.enabled or attached is not None else forwarded
-    )
+    if attached is not None:
+        safe_forwarded = {
+            k: safe_strata_preview_value(k, v) for k, v in forwarded.items()
+        }
+    elif CLIENT_SECURITY.enabled:
+        safe_forwarded = {
+            k: ("<redacted>" if k.lower() in _REQUEST_CONTENT_KEYS else v)
+            for k, v in forwarded.items()
+        }
+    else:
+        safe_forwarded = forwarded
     return JSONResponse({
         "original_model": model_alias,
         "forwarded_model": llama_alias,
@@ -1755,7 +1774,9 @@ async def debug_preview(request: Request):
         "policy_mode": policy_mode,
         "injected_params": injected,
         "overridden_by_client": {
-            k: req_data[k] for k in policy_injected
+            k: (safe_strata_preview_value(k, req_data[k])
+                if attached is not None else req_data[k])
+            for k in policy_injected
             if k in req_data and req_data[k] != profile_params[k]
                and k not in ("chat_template_kwargs",)
         },
