@@ -285,7 +285,7 @@ class StrataBackend:
         }
         if "retry-after" in upstream.headers:
             response_headers["retry-after"] = upstream.headers["retry-after"]
-        if "content-encoding" in upstream.headers:
+        if is_stream and upstream.status_code < 400 and "content-encoding" in upstream.headers:
             # Raw SSE bytes must retain their matching content encoding.
             response_headers["content-encoding"] = upstream.headers["content-encoding"]
 
