@@ -125,9 +125,9 @@ class HttpContracts(unittest.IsolatedAsyncioTestCase):
                 if self.streaming:
                     return httpx.Response(
                         self.status, headers={"content-type": "text/event-stream"},
-                        content=(b'data: {"choices":[{"delta":{"tool_calls":[{"index":0}]}}]}\\n\\n'
-                                 b'data: {"usage":{"prompt_tokens":7,"completion_tokens":3}}\\n\\n'
-                                 b'data: [DONE]\\n\\n'),
+                        content=(b'data: {"choices":[{"delta":{"tool_calls":[{"index":0}]}}]}\n\n'
+                                 b'data: {"usage":{"prompt_tokens":7,"completion_tokens":3}}\n\n'
+                                 b'data: [DONE]\n\n'),
                     )
                 return httpx.Response(
                     self.status, json={"choices": [{"finish_reason": "stop"}],
@@ -206,7 +206,7 @@ class HttpContracts(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(reply.status_code, 200)
         raw = b"".join([chunk async for chunk in reply.body_iterator])
         self.assertIn(b'tool_calls', raw)
-        self.assertTrue(raw.endswith(b"data: [DONE]\\n\\n"))
+        self.assertTrue(raw.endswith(b"data: [DONE]\n\n"))
         self.assertEqual(self.last_body["reasoning_effort"], "high")
         log = self.db.insert_proxy_request.call_args.kwargs
         self.assertEqual((log["prompt_tokens"], log["completion_tokens"]), (7, 3))
