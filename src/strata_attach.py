@@ -186,3 +186,153 @@ class StrataBackend:
         except (httpx.RequestError, httpx.TimeoutException, ValueError, TypeError, KeyError):
             return result
         return result
+
+    async def proxy(self, path: str, request: Any, db: Any):
+        """Preflight upstream headers/status before returning streaming body."""
+        import time
+        from fastapi.responses import JSONResponse, Response, StreamingResponse
+        from dispatcher_core import (
+            _extract_response_stats, _extract_thinking, _parameter_changes,
+            _request_params_snapshot,
+        )
+
+        # Inference whitelist is essential: /v1/load and /v1/unload are native controls.
+        if request.method != "POST" or path not in (
+            "chat/completions", "completions", "responses"
+        ):
+            return JSONResponse(
+                {"error": {"message": "Unsupported Strata inference endpoint.",
+                           "type": "invalid_request_error"}}, status_code=404,
+            )
+        try:
+            body = await request.json()
+            if not isinstance(body, dict):
+                raise ValueError()
+            mode = getattr(request.state, "policy_mode", "enforce")
+            forwarded, injected = self.resolve(body, mode)
+        except (ValueError, TypeError):
+            return JSONResponse(
+                {"error": {"message": "Invalid model alias, JSON or reasoning controls.",
+                           "type": "invalid_request_error"}}, status_code=400,
+            )
+
+        outgoing_body = json.dumps(forwarded, ensure_ascii=False).encode("utf-8")
+        is_stream = forwarded.get("stream") is True
+        client_model = body.get("model")
+        client_id = getattr(request.state, "client_id", None)
+        start = time.monotonic()
+        stats: dict[str, Any] = {
+            "prompt_tokens": None, "completion_tokens": None, "finish_reason": None,
+            "ttft": None, "status_code": 503,
+        }
+
+        def audit() -> None:
+            # Attached does not claim a Dispatcher-launched execution_run.
+            # S04 owns subsequent additive engine-neutral schema changes.
+            try:
+                original = _request_params_snapshot(body)
+                effective = _request_params_snapshot(forwarded)
+                injected_safe = _request_params_snapshot(injected)
+                db.insert_proxy_request(
+                    run_id=None, endpoint=path, model_requested=forwarded["model"],
+                    client_model=client_model, resolved_profile=None,
+                    target_model=forwarded["model"],
+                    alias_remapped=int(client_model != forwarded["model"]),
+                    stream=int(is_stream), req_temperature=forwarded.get("temperature"),
+                    req_top_p=forwarded.get("top_p"), req_top_k=forwarded.get("top_k"),
+                    req_min_p=forwarded.get("min_p"),
+                    req_max_tokens=forwarded.get("max_tokens"),
+                    req_enable_thinking=_extract_thinking(forwarded),
+                    effective_repeat_penalty=forwarded.get("repeat_penalty"),
+                    client_params=original, effective_params=effective,
+                    parameter_changes=_parameter_changes(
+                        original, effective, client_model, forwarded["model"], None,
+                    ),
+                    prompt_tokens=stats["prompt_tokens"],
+                    completion_tokens=stats["completion_tokens"],
+                    finish_reason=stats["finish_reason"],
+                    duration=time.monotonic() - start, ttft=stats["ttft"],
+                    status_code=stats["status_code"],
+                    injected_params=json.dumps(injected_safe, sort_keys=True)
+                    if injected_safe else None,
+                    client_id=client_id, policy_mode=mode,
+                )
+            except Exception:
+                # Do not echo exceptions potentially containing private response data.
+                print("[STRATA] Unable to record a proxy request summary.")
+
+        client = self.new_client()
+        try:
+            outgoing = client.build_request(
+                request.method, self.endpoint.v1_url(path), content=outgoing_body,
+                headers=self.headers(),
+            )
+            upstream = await client.send(outgoing, stream=True)
+            stats["status_code"] = upstream.status_code
+        except httpx.RequestError:
+            await client.aclose()
+            audit()
+            return JSONResponse(
+                {"error": {"message": "Attached Strata backend unavailable.",
+                           "type": "server_error"}}, status_code=503,
+            )
+
+        response_headers = {
+            "content-type": upstream.headers.get(
+                "content-type", "text/event-stream" if is_stream else "application/json"
+            )
+        }
+        if "retry-after" in upstream.headers:
+            response_headers["retry-after"] = upstream.headers["retry-after"]
+
+        if not is_stream or upstream.status_code >= 400:
+            try:
+                raw = await upstream.aread()
+                if raw:
+                    stats["ttft"] = time.monotonic() - start
+                if not is_stream:
+                    try:
+                        _extract_response_stats(json.loads(raw), stats)
+                    except (ValueError, TypeError):
+                        pass
+                return Response(raw, status_code=upstream.status_code,
+                                headers=response_headers)
+            except httpx.RequestError:
+                stats["status_code"] = 503
+                return JSONResponse(
+                    {"error": {"message": "Attached Strata backend unavailable.",
+                               "type": "server_error"}}, status_code=503,
+                )
+            finally:
+                await upstream.aclose()
+                await client.aclose()
+                audit()
+
+        async def stream_bytes():
+            # SSE is passed through byte-for-byte, including tool and reasoning
+            # deltas. Only bounded, reassembled lines feed summary-only metrics.
+            pending = bytearray()
+            try:
+                async for chunk in upstream.aiter_raw():
+                    if stats["ttft"] is None:
+                        stats["ttft"] = time.monotonic() - start
+                    pending.extend(chunk)
+                    if len(pending) > 1048576:
+                        pending.clear()
+                    while b"\n" in pending:
+                        line, _, remainder = pending.partition(b"\n")
+                        pending = bytearray(remainder)
+                        if line.startswith(b"data: "):
+                            try:
+                                _extract_response_stats(json.loads(line[6:]), stats)
+                            except (ValueError, TypeError):
+                                pass
+                    yield chunk
+            finally:
+                await upstream.aclose()
+                await client.aclose()
+                audit()
+
+        return StreamingResponse(
+            stream_bytes(), status_code=upstream.status_code, headers=response_headers,
+        )
