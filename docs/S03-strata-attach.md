@@ -7,8 +7,8 @@ This feature is **opt-in** and is **not** a Speedy/Caddy migration.
 ## Ownership and configuration
 
 Dispatcher proxies an **already running** Strata service over HTTP(S). There is
-no `Popen`, native engine launch, model download, restart, autoload request,
-calibration, unload, shutdown or child-process ownership in this path.
+no `Popen`, native engine launch, model download, restart, explicit autoload request,
+calibration, unload, shutdown or child-process ownership in this path. Native Strata may still lazy-load its own model in response to inference, under its own externally managed configuration.
 `/stop` and `/switch` return 409 in attached mode. Native Strata remains
 configured and supervised elsewhere. Existing managed llama.cpp `serve`,
 `bench`, `eval`, and its S00–S02 proxy behavior remain unchanged.
