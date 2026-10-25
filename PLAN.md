@@ -1,9 +1,9 @@
 # PLAN — Multi-engine Dispatcher: attach-first, external process supervision
 
-**Planning revision:** 2026-10-19 (proposal for owner review; no runtime/code changes in this PR).
+**Planning revision:** 2026-10-25 (S02 accepted-baseline and ContextCanon migration status update; runtime design unchanged).
 **Epic:** [#8](https://github.com/SomeSunlight/Llama_Dispatcher/issues/8).
 **Baseline:** S00 [#19](https://github.com/SomeSunlight/Llama_Dispatcher/issues/19) was owner-tested across three Windows/WSL installations and [PR #20](https://github.com/SomeSunlight/Llama_Dispatcher/pull/20) merged into `main` on 2026-10-19.
-**Accepted S01:** [PR #22](https://github.com/SomeSunlight/Llama_Dispatcher/pull/22) owner-tested (unit, live, SQLite and tiny streaming/nonstreaming inference) and squash-merged 2026-10-20. **Next gate:** S02 [#10](https://github.com/SomeSunlight/Llama_Dispatcher/issues/10), under independent owner review.
+**Accepted S01:** [PR #22](https://github.com/SomeSunlight/Llama_Dispatcher/pull/22) owner-tested (unit, live, SQLite and tiny streaming/nonstreaming inference) and squash-merged 2026-10-20. **Accepted S02:** [PR #23](https://github.com/SomeSunlight/Llama_Dispatcher/pull/23) squash-merged 2026-10-24. **Next implementation gate:** S03 [#11](https://github.com/SomeSunlight/Llama_Dispatcher/issues/11), pending its own scoped approval.
 
 > This document defines the **intended future boundary**, not a claim that the current Dispatcher is already attach-only. The currently accepted llama.cpp managed-start path remains functional until a separately approved transition explicitly retires it.
 
@@ -51,7 +51,7 @@ Checked boxes denote **merged and owner-accepted**, not merely coded. Preserve e
 
 - [x] **S00 — [#19](https://github.com/SomeSunlight/Llama_Dispatcher/issues/19)**: Baseline characterization only. [PR #20](https://github.com/SomeSunlight/Llama_Dispatcher/pull/20) accepted and squash-merged on 2026-10-19; owner reports successful runs across three Windows/WSL installations. No production refactor.
 - [x] **S01 — [#9](https://github.com/SomeSunlight/Llama_Dispatcher/issues/9)**: Extract small, capability-aware llama.cpp backend / compile vs proxy / attachment seams **without changing current managed llama.cpp behavior**. Tests from S00 are mandatory. Define endpoint-attachment contract. Requires S00 and this plan's approval. Owner accepted and squash-merged [PR #22](https://github.com/SomeSunlight/Llama_Dispatcher/pull/22) on 2026-10-20, including live inference regression.
-- [ ] **S02 — [#10](https://github.com/SomeSunlight/Llama_Dispatcher/issues/10)**: Per-client authentication/identity and explicit `default/enforce/passthrough` policy, preserving current clients until a tested migration. Requires S01; **required before any Strata production cutover**.
+- [x] **S02 — [#10](https://github.com/SomeSunlight/Llama_Dispatcher/issues/10)**: Per-client authentication/identity and explicit `default/enforce/passthrough` policy, preserving current clients until a tested migration. Requires S01; **required before any Strata production cutover**. Owner accepted and squash-merged [PR #23](https://github.com/SomeSunlight/Llama_Dispatcher/pull/23) on 2026-10-24; this does not authorize the later S03 cutover.
 - [ ] **S03 — [#11](https://github.com/SomeSunlight/Llama_Dispatcher/issues/11)**: **First deliverable with real user value:** Strata HTTP attach-only adapter and proxy aliases; test long streaming/tool calling, vision, reasoning semantics, cancellation, large context and authentication against the currently running Speedy Strata. Do not start/stop Strata; preserve direct Caddy route as fallback. Requires S01 + S02; **external supervisor is NOT a prerequisite**.
 - [ ] **S04 — [#12](https://github.com/SomeSunlight/Llama_Dispatcher/issues/12)**: Additive engine-neutral SQLite/run/config/provenance schema. Attached process is observed, not owned; external supervisor is process-lifecycle authority. Can be designed with S02/S03 but implementation is a separately accepted PR.
 - [ ] **S05 — [#13](https://github.com/SomeSunlight/Llama_Dispatcher/issues/13)**: Strata native `/metrics` / `/status` ingest, lossless missingness and safe correlation with proxy requests. Requires S03 + S04.
@@ -99,9 +99,22 @@ The issue bodies from the 2026-10-16 roadmap may still describe the **old** proc
 
 ## 8. How to resume safely
 
-1. Owner reviews/accepts this architecture plan; then update Epic #8 and conflicting issue bodies, and create/confirm the independent service-manager project's tracking issues.
-2. Start **S01 #9 only**, using the accepted merged S00 test suite. Produce one focused PR with actual Windows/WSL-relevant automated tests, manual Speedy smoke/rollback steps and no other gate's code.
-3. Continue S02 → S03, retaining current Speedy Strata as reference and Caddy fallback. No forced move to the external supervisor.
-4. Advance telemetry, compilation and supervisor integration in separately approved gates, then selectively migrate instances.
+1. The accepted S00, S01 and S02 baselines are recorded above; do not reopen them without a separately scoped issue.
+2. After the ContextCanon-only [PR #25](https://github.com/SomeSunlight/Llama_Dispatcher/pull/25) is merged and its baseline closed, take up **S03 #11** in a separate owner-reviewed implementation PR. Keep the existing Speedy Strata process and direct Caddy route as reference/fallback.
+3. Advance telemetry, compilation and external supervisor integration in their separately approved gates, then selectively migrate instances. No forced move to an external supervisor for S03.
 
-**Next after plan approval:** S01 #9. **First production-user milestone:** S03 #11, Strata attach and authenticated proxy aliases.
+**Next implementation gate:** S03 #11, Strata attach and authenticated proxy aliases.
+
+## 9. ContextCanon parent migration — [#24](https://github.com/SomeSunlight/Llama_Dispatcher/issues/24)
+
+This isolated context-maintenance block is tracked by [PR #25](https://github.com/SomeSunlight/Llama_Dispatcher/pull/25). It changes ContextCanon authoring, accepted packages and their deterministic outputs, plus the relevant CI verification step; it does not change Dispatcher runtime behavior.
+
+- [x] Remove the outdated ContextCanon Foundation import and use the GitHub Parent, inheriting Development Workflow.
+- [x] Adopt the exact GitHub package using ContextCanon, propagate to local Children, and regenerate/verify the context packages. Owner performed the ContextCanon-managed migration.
+- [x] Replace machine-specific Source discovery configuration with the portable Git repository and eliminate stale Foundation discovery mappings.
+- [x] Update CI to pin the compiler supporting the accepted packages and verify all local Context Nodes.
+- [x] Confirm the review candidate passes required Windows/Linux CI, including generated ContextCanon output and zero drift; reverify the exact final head after the final checkpoint commit.
+- [ ] Obtain explicit owner approval, then squash-merge PR #25.
+- [ ] After merge, record its accepted baseline before starting the next implementation block.
+
+Future ContextCanon authoring/discovery improvements and the generated project map are tracked separately in [context-canon #123](https://github.com/SomeSunlight/context-canon/issues/123) and [#124](https://github.com/SomeSunlight/context-canon/issues/124), and are not prerequisites for this PR.

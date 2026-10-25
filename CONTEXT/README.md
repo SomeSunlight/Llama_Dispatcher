@@ -8,14 +8,14 @@ This `CONTEXT/` directory exists because the Node has deeper Topic resources tha
 
 ## Why `references/` may look like duplicate documentation
 
-`references/` contains exact materialized copies of effective Topic resources. The first path component after `CONTEXT/references/` is the stable origin Node identity (or a deterministic hash when that identity is not path-safe); the remaining path preserves repository-relative source location. This namespace lets inherited Topic resources from independent packages coexist without Source-order precedence.
+`references/` contains exact materialized copies of effective Topic resources. The first path component after `CONTEXT/references/` is a compact origin token; full Node identity and original repository paths are authenticated in `../.context/resource-origins.json`. Remaining paths normally preserve authoring-Node-relative directories. Cross-Node links widen the common base enough to keep exact relative links valid. This namespace lets inherited Topic resources coexist without Parent-order precedence.
 
 For example:
 
 ```text
 nodes/internal/framework-development/docs/architecture.md
         ↓ deterministic materialization
-CONTEXT/references/<origin-node-id>/nodes/internal/framework-development/docs/architecture.md
+CONTEXT/references/<origin-token>/docs/architecture.md
 ```
 
 The first path is the authored source. The second path is generated package content and is **not another maintenance surface**.

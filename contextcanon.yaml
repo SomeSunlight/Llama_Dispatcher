@@ -5,6 +5,6 @@ repositories:
     location: https://github.com/SomeSunlight/context-canon.git
     ref: main
 sources:
-  4ca9d92c-59f2-4b1f-b7b3-0e2ff91fd001:
+  ccf4d7ee-4db1-4110-9ddc-5d70c69cf2bc:
     repository: context-canon
-    path: nodes/library/foundation
+    path: nodes/library/github
