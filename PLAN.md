@@ -118,3 +118,16 @@ This isolated context-maintenance block is tracked by [PR #25](https://github.co
 - [x] Reconcile the post-merge accepted baseline in `PLAN.md`; S03 #11 is the next independently reviewed implementation block.
 
 Future ContextCanon authoring/discovery improvements and the generated project map are tracked separately in [context-canon #123](https://github.com/SomeSunlight/context-canon/issues/123) and [#124](https://github.com/SomeSunlight/context-canon/issues/124), and are not prerequisites for this PR.
+
+## 10. S03 implementation checkpoint — [#11](https://github.com/SomeSunlight/Llama_Dispatcher/issues/11)
+
+**Status:** mock-verified draft review candidate on `feature/s03-strata-attach-issue11` ([PR #27](https://github.com/SomeSunlight/Llama_Dispatcher/pull/27)) after accepted [PR #26](https://github.com/SomeSunlight/Llama_Dispatcher/pull/26). Scope is an opt-in, externally managed Strata HTTP attachment with mocked contracts first; no instance migration or productive Speedy/Caddy change.
+
+- [x] Verify accepted S02/PR #25/#26 baseline and establish a separate S03 review branch.
+- [x] Define strict attach configuration, credential isolation, request reasoning resolution and unavailable behavior in deterministic contract tests.
+- [x] Implement Strata HTTP attachment and probe/alias/proxy with no engine subprocess or lifecycle control; keep llama.cpp serve, bench, eval and legacy proxy unchanged.
+- [x] Verify HTTP status, SSE/cancellation, tool/vision content forwarding, authentication separation, redacted debug previews and existing S00–S02 regressions in 87 mock/unit tests on Windows and Ubuntu CI. This is not native Strata validation.
+- [x] Document laptop-first smoke/rollback, automated observations and deferred Speedy owner gates; open draft review PR #27.
+- [ ] Owner optionally tests an actual small Strata model on Laptop/Windows or WSL; record host, endpoint, native Strata version, observed success/failure and any skipped cases (none has run yet).
+- [ ] Owner reviews actual evidence and explicitly approves; perform exact-head checks before a separately authorized merge. Speedy/Caddy/Goose/Open WebUI production cutover is a different owner gate.
+

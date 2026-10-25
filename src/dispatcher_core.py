@@ -22,6 +22,7 @@ from pydantic import BaseModel, Field
 
 from database_manager import MetricsDatabase
 from inference_backend import LlamaCppBackend
+from strata_attach import StrataBackend, StrataConfigurationError
 from client_policy import (
     ClientSecurity, ClientConfigurationError, apply_request_policy, load_client_security,
 )
@@ -293,6 +294,7 @@ class LlamaOrchestrator:
     backend = LEGACY_LLAMA_BACKEND
 
     def __init__(self, machine_id: str = "unknown"):
+        self.strata_attach: StrataBackend | None = None
         self.current_process: asyncio.subprocess.Process | None = None
         self.is_running: bool = False
         # Instance mode (--instance): DATA_DIR = instances/<name>/data/ → metrics.db
@@ -1411,7 +1413,7 @@ _SAFE_PARAMETER_KEYS = frozenset({
     "model", "stream", "temperature", "top_p", "top_k", "min_p",
     "max_tokens", "max_completion_tokens", "n", "seed", "stop",
     "presence_penalty", "frequency_penalty", "repeat_penalty",
-    "reasoning_effort", "thinking_budget", "stream_options",
+    "reasoning_effort", "reasoning_budget_tokens", "thinking_budget", "stream_options",
     "mirostat", "mirostat_tau", "mirostat_eta", "typical_p", "min_keep",
 })
 _REQUEST_CONTENT_KEYS = frozenset({
@@ -1490,6 +1492,10 @@ async def proxy_to_llama(path: str, request: Request):
     Clients simply point to http://<host>:<api-port>/v1/ instead of directly to llama.cpp.
     """
     assert orchestrator is not None
+
+    attached = getattr(orchestrator, "strata_attach", None)
+    if attached is not None:
+        return await attached.proxy(path, request, orchestrator.db)
 
     if not orchestrator.is_running or orchestrator._proxy_target_port is None:
         return JSONResponse(
@@ -1652,6 +1658,14 @@ async def debug_config():
     - On which port llama.cpp is listening
     """
     assert orchestrator is not None
+    attached = getattr(orchestrator, "strata_attach", None)
+    if attached is not None:
+        return JSONResponse({
+            "status": "attached", "backend": "strata", "ownership": "attached",
+            "aliases": [{"alias": alias, "target": attached.targets[alias],
+                         "injected_params": attached.sampling[alias]}
+                        for alias in attached.aliases],
+        })
     aliases_info = []
     for alias in orchestrator._active_model_aliases:
         target = orchestrator._proxy_alias_targets.get(alias)
@@ -1667,6 +1681,18 @@ async def debug_config():
         "llama_port": orchestrator._proxy_target_port,
         "aliases": aliases_info,
     })
+
+
+@app.get("/debug/strata")
+async def debug_strata():
+    """Read-only capability probe of an existing externally managed Strata endpoint."""
+    assert orchestrator is not None
+    attached = getattr(orchestrator, "strata_attach", None)
+    if attached is None:
+        return JSONResponse({"error": "No Strata endpoint attached."}, status_code=404)
+    observed = await attached.probe()
+    return JSONResponse({"backend": "strata", "ownership": "attached", **observed},
+                        status_code=200 if observed["available"] else 503)
 
 
 @app.post("/debug/preview")
@@ -1695,9 +1721,30 @@ async def debug_preview(request: Request):
     model_alias = req_data.get("model", "")
     profile_params = orchestrator._proxy_sampling_params.get(model_alias, {})
     policy_mode = getattr(request.state, "policy_mode", "enforce")
-    forwarded, policy_injected = apply_request_policy(req_data, profile_params, policy_mode)
+    attached = getattr(orchestrator, "strata_attach", None)
+    if attached is not None:
+        try:
+            forwarded, policy_injected = attached.resolve(req_data, policy_mode)
+        except ValueError:
+            return JSONResponse({"error": "Invalid model alias or conflicting reasoning controls."},
+                                status_code=400)
+    else:
+        forwarded, policy_injected = apply_request_policy(req_data, profile_params, policy_mode)
+    # S03: diagnostics must not reveal unknown extension fields or nested
+    # client values (which can contain arbitrary private tool/prompt material).
+    def safe_strata_preview_value(key: str, value: Any) -> Any:
+        if key == "chat_template_kwargs":
+            return _request_params_snapshot({key: value}).get(key, "<redacted>")
+        if key in _SAFE_PARAMETER_KEYS and not isinstance(value, (dict, list)):
+            return value
+        return "<redacted>"
+
     injected = {
-        k: {"from_profile": v, "client_sent": req_data.get(k)}
+        k: {
+            "from_profile": safe_strata_preview_value(k, v) if attached is not None else v,
+            "client_sent": (safe_strata_preview_value(k, req_data.get(k))
+                            if attached is not None else req_data.get(k)),
+        }
         for k, v in policy_injected.items()
     }
 
@@ -1709,11 +1756,17 @@ async def debug_preview(request: Request):
 
     # Redact content in authenticated diagnostics; preserve legacy S00 preview
     # until a deliberate client migration is accepted.
-    safe_forwarded = (
-        {k: ("<redacted>" if k.lower() in _REQUEST_CONTENT_KEYS else v)
-         for k, v in forwarded.items()}
-        if CLIENT_SECURITY.enabled else forwarded
-    )
+    if attached is not None:
+        safe_forwarded = {
+            k: safe_strata_preview_value(k, v) for k, v in forwarded.items()
+        }
+    elif CLIENT_SECURITY.enabled:
+        safe_forwarded = {
+            k: ("<redacted>" if k.lower() in _REQUEST_CONTENT_KEYS else v)
+            for k, v in forwarded.items()
+        }
+    else:
+        safe_forwarded = forwarded
     return JSONResponse({
         "original_model": model_alias,
         "forwarded_model": llama_alias,
@@ -1721,18 +1774,25 @@ async def debug_preview(request: Request):
         "policy_mode": policy_mode,
         "injected_params": injected,
         "overridden_by_client": {
-            k: req_data[k] for k in policy_injected
+            k: (safe_strata_preview_value(k, req_data[k])
+                if attached is not None else req_data[k])
+            for k in policy_injected
             if k in req_data and req_data[k] != profile_params[k]
                and k not in ("chat_template_kwargs",)
         },
         "forwarded_body": safe_forwarded,
-        "note": "This is a simulation – no request was sent to llama.cpp.",
+        "note": ("This is a simulation – no request was sent to Strata."
+                 if attached is not None else
+                 "This is a simulation – no request was sent to llama.cpp."),
     })
 
 
 @app.post("/switch")
 async def api_switch_ensemble(request: ServeRequest):
     assert orchestrator is not None, "Orchestrator not initialized"
+    if getattr(orchestrator, "strata_attach", None) is not None:
+        return JSONResponse({"error": "External Strata lifecycle is not managed here."},
+                            status_code=409)
     if bool(request.ensemble) == bool(request.profile):
         return {"status": "error", "message": "Please specify exactly one of 'ensemble' or 'profile'."}
 
@@ -1755,6 +1815,9 @@ async def api_switch_ensemble(request: ServeRequest):
 @app.post("/stop")
 async def api_stop():
     assert orchestrator is not None, "Orchestrator not initialized"
+    if getattr(orchestrator, "strata_attach", None) is not None:
+        return JSONResponse({"error": "External Strata lifecycle is not managed here."},
+                            status_code=409)
     if orchestrator.current_process and orchestrator.is_running:
         orchestrator.is_running = False
         orchestrator.current_process.terminate()
@@ -1814,6 +1877,11 @@ def main():
         ),
     )
     parser.add_argument(
+        "--strata-config", metavar="PRIVATE_JSON",
+        help="Attach to already-running Strata using private JSON; never starts or stops it. "
+             "Requires DISPATCHER_CLIENT_CONFIG.",
+    )
+    parser.add_argument(
         "--compile-only",
         action="store_true",
         help="Only compile ensemble/profile to llama.cpp INI and display the start command.",
@@ -1827,6 +1895,9 @@ def main():
         sys.exit(f"[ERROR] Client authentication: {exc}")
     if CLIENT_SECURITY.enabled:
         print(f"[AUTH] Enabled for {len(CLIENT_SECURITY.clients)} configured clients.")
+
+    if args.strata_config and args.mode != "serve":
+        sys.exit("[ERROR] --strata-config is only valid with serve.")
 
     # ── Resolve instance and set global paths ─────────────────────────────────
     machine_id = "unknown"
@@ -1856,6 +1927,32 @@ def main():
             api_port = int(_dispatcher_cfg.get("port") or _dispatcher_cfg.get("api_port") or 8001)
 
     orchestrator.api_port = api_port  # for startup log
+
+    if args.mode == "serve" and args.strata_config:
+        if args.ensemble or args.profile or args.compile_only or unknown:
+            sys.exit("[ERROR] --strata-config cannot be combined with managed serve/profile/overrides.")
+        if not CLIENT_SECURITY.enabled:
+            sys.exit("[ERROR] Strata attach requires authenticated clients (DISPATCHER_CLIENT_CONFIG).")
+        try:
+            attached = StrataBackend.from_file(args.strata_config)
+        except StrataConfigurationError as exc:
+            sys.exit(f"[ERROR] Strata attach: {exc}")
+        orchestrator.strata_attach = attached
+        orchestrator._active_model_aliases = list(attached.aliases)
+        orchestrator._proxy_sampling_params = attached.sampling
+        orchestrator._proxy_alias_targets = attached.targets
+        orchestrator._proxy_profiles = {}
+        orchestrator.is_running = True  # Proxy online, not an engine process ownership claim.
+
+        @asynccontextmanager
+        async def attach_lifespan(app: FastAPI):
+            yield
+            orchestrator.is_running = False  # No external service operation.
+
+        app.router.lifespan_context = attach_lifespan
+        print(f"[ATTACH] Serving {len(attached.aliases)} aliases for externally managed Strata.")
+        uvicorn.run(app, host="0.0.0.0", port=api_port)
+        return
 
     if args.mode == "serve":
         if bool(args.ensemble) == bool(args.profile):
