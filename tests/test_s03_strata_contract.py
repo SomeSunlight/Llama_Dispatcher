@@ -279,12 +279,19 @@ class HttpContracts(unittest.IsolatedAsyncioTestCase):
                 self.assertNotIn("native-test-secret", probe.text)
                 preview = await client.post("/debug/preview", headers=h, json={
                     "model": "agent", "messages": [{"content": "secret image or prompt"}],
-                    "temperature": 0.9,
+                    "temperature": {"private": "nested client field"},
+                    "custom_native_extension": {"private": "unknown extension"},
                 })
                 self.assertEqual(preview.status_code, 200)
                 self.assertEqual(preview.json()["forwarded_body"]["model"], "strata")
                 self.assertEqual(preview.json()["forwarded_body"]["messages"], "<redacted>")
+                self.assertEqual(preview.json()["forwarded_body"]["custom_native_extension"],
+                                 "<redacted>")
+                self.assertEqual(preview.json()["overridden_by_client"]["temperature"],
+                                 "<redacted>")
                 self.assertNotIn("secret image or prompt", preview.text)
+                self.assertNotIn("unknown extension", preview.text)
+                self.assertNotIn("nested client field", preview.text)
                 self.assertEqual(
                     (await client.post("/stop", headers=h)).status_code, 409
                 )
