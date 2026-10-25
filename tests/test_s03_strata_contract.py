@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import hashlib
 import sys
 import unittest
 from pathlib import Path
@@ -15,6 +16,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 import dispatcher_core as core  # noqa: E402
 from strata_attach import StrataBackend, StrataConfigurationError  # noqa: E402
+from client_policy import ClientIdentity, ClientSecurity  # noqa: E402
 
 
 def configuration():
@@ -238,6 +240,54 @@ class HttpContracts(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(reply.status_code, 503)
         self.assertNotIn("offline", reply.body.decode())
         self.assertNotIn("native-test-secret", reply.body.decode())
+
+    async def test_early_stream_close_records_unknown_usage_not_fake_zero(self):
+        self.streaming = True
+        response = await core.proxy_to_llama(
+            "chat/completions", incoming({"model": "agent", "stream": True})
+        )
+        it = response.body_iterator
+        self.assertTrue((await anext(it)).startswith(b"data: "))
+        await it.aclose()
+        saved = self.db.insert_proxy_request.call_args.kwargs
+        self.assertIsNone(saved["prompt_tokens"])
+        self.assertIsNone(saved["completion_tokens"])
+        self.assertIsNone(saved["run_id"])
+
+    async def test_native_control_routes_are_never_forwarded(self):
+        response = await core.proxy_to_llama("unload", incoming({"model": "agent"}))
+        self.assertEqual(response.status_code, 404)
+        self.assertEqual(self.requests, [])
+        self.db.insert_proxy_request.assert_not_called()
+
+    async def test_asgi_auth_and_redacted_preview_for_attached_backend(self):
+        digest = lambda token: hashlib.sha256(token.encode()).hexdigest()
+        auth = ClientSecurity((
+            ClientIdentity("goose", digest("client-test-goose"), "enforce"),
+            ClientIdentity("webui", digest("client-test-webui"), "default"),
+        ))
+        with patch.object(core, "CLIENT_SECURITY", auth):
+            async with httpx.AsyncClient(
+                transport=httpx.ASGITransport(app=core.app),
+                base_url="http://dispatcher.test",
+            ) as client:
+                self.assertEqual((await client.get("/debug/strata")).status_code, 401)
+                h = {"authorization": "Bearer client-test-goose"}
+                probe = await client.get("/debug/strata", headers=h)
+                self.assertEqual(probe.status_code, 200)
+                self.assertEqual(probe.json()["ownership"], "attached")
+                self.assertNotIn("native-test-secret", probe.text)
+                preview = await client.post("/debug/preview", headers=h, json={
+                    "model": "agent", "messages": [{"content": "secret image or prompt"}],
+                    "temperature": 0.9,
+                })
+                self.assertEqual(preview.status_code, 200)
+                self.assertEqual(preview.json()["forwarded_body"]["model"], "strata")
+                self.assertEqual(preview.json()["forwarded_body"]["messages"], "<redacted>")
+                self.assertNotIn("secret image or prompt", preview.text)
+                self.assertEqual(
+                    (await client.post("/stop", headers=h)).status_code, 409
+                )
 
     async def test_attach_never_exposes_native_process_controls(self):
         stop = await core.api_stop()
