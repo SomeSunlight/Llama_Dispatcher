@@ -249,6 +249,124 @@ credentials, long reasoning/tool traces, SSE cancellation, vision and actual
 native behavior/response quality. Two tiny chat calls are necessary evidence
 for HTTP attach, **not** complete production acceptance.
 
+## Existing Caddy gateway trial for real Goose on Laptop/WSL (2026-11-02)
+
+The owner's working Caddy already has a separate `/v1/*` Dispatcher upstream
+on loopback port **8001**, and a **direct** `/strata/v1/*` native Strata route
+on **8080**. Goose can use the already established HTTPS address; a new public
+route, SSH tunnel or forwarding port is **not** required.
+
+**One necessary adjustment:** Caddy's old Dispatcher block explicitly had
+`header_up -Authorization`, removing its validated Bearer header before
+Dispatcher. In S02 mode that produces HTTP 401. Caddy must instead forward
+the validated Authorization header *only* to the S03 Dispatcher. This is a
+temporary **single shared** `home-gateway` client identity: existing Goose,
+Open WebUI and other callers using that shared key cannot yet be
+distinguished as separate clients. Do not invent identities based on
+User-Agent or `X-Client-ID`. A later separate S02/Caddy multi-client
+credential migration will be a distinct owner gate.
+
+**Important Caddy security:** `{$SPEEDY_API_KEY}` in the current Caddyfile
+is substituted from the **reload command's environment**, not magically
+inherited from the already-running Caddy process. Reloading by hand without
+provisioning the key can silently change or disable the gateway's Bearer
+check. The opt-in script below decrypts the owner's existing DPAPI secret
+*in memory*, sets the necessary environment for validate/reload, and
+verifies Caddy's exact unauthenticated 401 before considering the
+transition successful.
+
+### A. Speedy, PowerShell 7.4 — own console, leave running
+
+Open a **separate S03 PR checkout**; the existing Strata/Caddy must already
+be running as before. Confirm the old process is **not** listening on port
+8001; the new script explicitly refuses an occupied port and never kills
+it:
+
+```powershell
+./scripts/s03_speedy_gateway.ps1 -DpapiKeyFile 'C:\Caddy\speedy-api-key.dpapi'
+```
+
+This creates private **local** JSON under
+`%LOCALAPPDATA%\Llama_Dispatcher\S03\gateway\`, hash-only S02 client
+credential configuration, and a separate `Speedy_S03_Stage` instance/
+SQLite database under the isolated PR checkout. The native API key is
+recovered from the existing DPAPI secret (same Windows account), passed
+only via process environment, and not persisted in JSON. The dispatcher
+runs on `127.0.0.1:8001`, independently of Strata. The default public
+alias is `agent`; it maps to Strata's actual `/v1/models` ID.
+
+The test identity uses `passthrough` and **no extra alias sampling
+parameters** so Goose's previously working direct-Strata generation
+settings are not silently overridden. In later tests, introduce a separate
+policy-controlled alias; do not add low `max_tokens` overrides to a
+reasoning model. The S03 one-shot smoke already separately exercises
+`enforce` and audit traces.
+
+### B. Speedy, second PowerShell — inspect then explicitly apply Caddy edit
+
+This script changes **one** upstream header directive and preserves the
+original upstream 8001, both routes, and the current DuckDNS token
+*byte-for-byte except for that directive*. It **never commits, prints or
+uploads** the user's Caddyfile or API keys. Dry-run first:
+
+```powershell
+./scripts/s03_caddy_gateway.ps1 -Caddyfile 'C:\Caddy\Caddyfile'
+```
+
+Only when the staged S03 Dispatcher is running on 8001:
+
+```powershell
+./scripts/s03_caddy_gateway.ps1 `
+  -Caddyfile 'C:\Caddy\Caddyfile' `
+  -CaddyExe 'C:\Caddy\caddy_windows_amd64_custom.exe' `
+  -DpapiKeyFile 'C:\Caddy\speedy-api-key.dpapi' `
+  -ApiBaseUrl 'https://YOUR-EXISTING-DOMAIN' -Apply
+```
+
+The script makes a timestamped **LOCAL** Caddyfile backup, validates and
+reloads only with the secret available, and checks Caddy's 401 anonymous /
+200 authenticated `/v1/models` behavior. If validation/reload or that
+verification fails it restores the previous Caddyfile and attempts to
+reload the old configuration. The Caddy backup may include an actual DNS
+token; keep it out of Git and review external shares carefully.
+
+### C. Laptop/WSL — real Goose acceptance
+
+Continue using the **existing Caddy HTTPS host**; configure Goose's
+OpenAI-compatible provider through `aiw goose configure` (native Goose
+settings inside the existing container) to use the **existing**
+`https://YOUR-EXISTING-DOMAIN/v1` path rather than direct
+`/strata/v1`. Select the **public Dispatcher alias `agent`**, not
+Strata's internal model ID. Reuse the current **gateway Bearer secret**
+that was already used for authorized HTTPS calls; do not paste it into
+GitHub or reports.
+
+For a meaningful owner gate, execute a **representative Goose task with
+tools**, compare the actual outcome to the known working direct Strata
+path, and inspect the *separate staging instance's* `metrics.db` for
+client ID `home-gateway`, native target, `run_id=NULL`, request policies,
+statuses, tokens and SSE behavior. The shared key **cannot establish**
+that each row came specifically from Goose. Real per-client attribution
+requires distinct credentials in a later gate.
+
+### Rollback / limits
+
+To retain the working direct route, Goose can immediately be pointed back
+to `/strata/v1`; the Caddy routing for that path never changes.
+The stage Dispatcher is **foreground-only** in the first console: closing
+it or pressing Ctrl+C stops that listener, so `/v1` is then unavailable
+until the previous Dispatcher returns. This is intentionally **not**
+the final persistent host supervisor. Do not run it as a Windows
+startup task or replace the working Strata/Caddy start script.
+Full lifecycle management belongs to the AI Workstation's Process Compose
+integration ([#34](https://github.com/SomeSunlight/ai-workstation/issues/34)).
+
+**Open questions for final acceptance:** distinct client identities, native
+tool/reasoning/vision behavior on long Goose jobs, Caddy streaming and
+disconnect/cancellation, request and response content omission from logs,
+and operator recovery after errors. PR #27 should not merge or be treated
+as productive cutover before owner sign-off.
+
 ## Automated review evidence
 
 No native model is required for the deterministic tests:
