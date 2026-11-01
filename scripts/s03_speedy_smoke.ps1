@@ -25,7 +25,8 @@ $attachFile = Join-Path $sessionDir "strata-attach.json"
 $nativeUrl = [uri]$StrataUrl
 if ($nativeUrl.Scheme -ne "http" -or
     $nativeUrl.Host -notin @("127.0.0.1", "localhost", "::1") -or
-    $nativeUrl.AbsolutePath -ne "/" -or $nativeUrl.Query -or $nativeUrl.Fragment -or
+    $nativeUrl.AbsolutePath -ne "/" -or $nativeUrl.UserInfo -or
+    $nativeUrl.Query -or $nativeUrl.Fragment -or
     $nativeUrl.IsDefaultPort) {
     # Require an explicit port even when host and scheme are otherwise valid.
     throw "This one-shot S03 runner requires a local http://127.0.0.1:PORT Strata root URL."
@@ -50,8 +51,11 @@ try {
     }
     $headers = @{ Authorization = "Bearer $env:STRATA_NATIVE_KEY" }
     $nativeModels = Invoke-RestMethod -Uri ($StrataUrl.TrimEnd('/') + "/v1/models") -Headers $headers -TimeoutSec 10
-    $nativeId = @($nativeModels.data | Where-Object { $_.id })[0].id
-    if (-not $nativeId) { throw "Running native Strata returned no model identifier." }
+    $nativeCandidates = @($nativeModels.data | Where-Object { $_.id })
+    if ($nativeCandidates.Count -lt 1) {
+        throw "Running native Strata returned no model identifier."
+    }
+    $nativeId = $nativeCandidates[0].id
 
     New-Item -ItemType Directory -Path $sessionDir -Force | Out-Null
     $env:S03_SMOKE_CLIENT_TOKEN = [Convert]::ToHexString(
@@ -69,6 +73,11 @@ try {
        credential_env = "STRATA_NATIVE_KEY";
        aliases = @{ agent = @{ model = $nativeId; parameters = @{ temperature = 0.2 } } }
     } | ConvertTo-Json -Depth 6 | Set-Content -Encoding utf8 $attachFile
+
+    $existing = @(Get-NetTCPConnection -State Listen -LocalPort $DispatcherPort -ErrorAction SilentlyContinue)
+    if ($existing.Count -gt 0) {
+        throw "Test Dispatcher port $DispatcherPort is already in use. Use -DispatcherPort 18002."
+    }
 
     Write-Host "[S03] Native model: $nativeId"
     Write-Host "[S03] Starting an isolated Dispatcher at $dispatcherUrl (Strata remains running)."
@@ -125,7 +134,16 @@ finally {
         }
         Stop-Job -Job $job -ErrorAction SilentlyContinue
         Remove-Job -Job $job -Force -ErrorAction SilentlyContinue
-        Write-Host "[S03] Stopped only the disposable test Dispatcher."
+        # A subprocess may outlive a PowerShell background job on some Windows
+        # builds. Never terminate an unknown PID; flag residual test listeners.
+        Start-Sleep -Milliseconds 350
+        $listeners = @(Get-NetTCPConnection -State Listen -LocalPort $DispatcherPort -ErrorAction SilentlyContinue)
+        if ($listeners.Count -gt 0) {
+            Write-Warning "Port $DispatcherPort still listens after Stop-Job. Inspect the test Dispatcher process manually; do not stop native Strata."
+        }
+        else {
+            Write-Host "[S03] Disposable test Dispatcher listener stopped."
+        }
     }
     Remove-Item -LiteralPath $sessionDir -Recurse -Force -ErrorAction SilentlyContinue
     [Environment]::SetEnvironmentVariable("STRATA_NATIVE_KEY", $previousNative, "Process")
