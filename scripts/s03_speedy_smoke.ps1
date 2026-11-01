@@ -26,7 +26,7 @@ $nativeUrl = [uri]$StrataUrl
 if ($nativeUrl.Scheme -ne "http" -or
     $nativeUrl.Host -notin @("127.0.0.1", "localhost", "::1") -or
     $nativeUrl.AbsolutePath -ne "/" -or $nativeUrl.Query -or $nativeUrl.Fragment -or
-    -not $nativeUrl.IsDefaultPort -eq $false) {
+    $nativeUrl.IsDefaultPort) {
     # Require an explicit port even when host and scheme are otherwise valid.
     throw "This one-shot S03 runner requires a local http://127.0.0.1:PORT Strata root URL."
 }
@@ -83,7 +83,7 @@ try {
 
     $ready = $false
     for ($i = 0; $i -lt 25; $i++) {
-        if ($job.State -ne "Running") { break }
+        if ($job.State -in @("Failed", "Stopped", "Completed")) { break }
         try {
             $probe = Invoke-WebRequest -Uri ($dispatcherUrl + "/v1/models") `
                 -Headers @{ Authorization = "Bearer $env:S03_SMOKE_CLIENT_TOKEN" } `
