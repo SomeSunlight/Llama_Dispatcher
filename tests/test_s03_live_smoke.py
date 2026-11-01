@@ -6,6 +6,7 @@ import sqlite3
 import sys
 import tempfile
 import unittest
+from contextlib import closing
 from argparse import Namespace
 from pathlib import Path
 from unittest.mock import patch
@@ -30,7 +31,7 @@ class SmokeRunnerContracts(unittest.TestCase):
     def test_read_only_sqlite_audit_filter(self):
         with tempfile.TemporaryDirectory() as d:
             db_file = Path(d) / "metrics.db"
-            with sqlite3.connect(db_file) as conn:
+            with closing(sqlite3.connect(db_file)) as conn, conn:
                 conn.execute("PRAGMA user_version = 9")
                 conn.execute("""CREATE TABLE metrics_proxy_requests (
                     client_id TEXT, client_model TEXT, target_model TEXT,
@@ -40,7 +41,7 @@ class SmokeRunnerContracts(unittest.TestCase):
                     ('other','agent','strata',0,200,NULL,'enforce',1),
                     ('s03-smoke','agent','strata',1,200,NULL,'enforce',1)""")
             self.assertEqual(last_rowid(db_file), 2)
-            with sqlite3.connect(db_file) as conn:
+            with closing(sqlite3.connect(db_file)) as conn, conn:
                 conn.execute("""INSERT INTO metrics_proxy_requests VALUES
                     ('s03-smoke','agent','strata',0,200,NULL,'enforce',1),
                     ('other','agent','strata',1,200,NULL,'enforce',1)""")
