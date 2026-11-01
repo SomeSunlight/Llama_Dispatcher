@@ -76,6 +76,15 @@ jobs:
           if ([IO.File]::ReadAllText($fixture) -cne $before) {
             throw 'S03 Caddy dry-run mutated the fixture.'
           }
+          $forwarded = $before.Replace(
+            'header_up -Authorization',
+            'header_up Authorization {http.request.header.Authorization}'
+          )
+          [IO.File]::WriteAllText($fixture, $forwarded)
+          ./scripts/s03_caddy_gateway.ps1 -Caddyfile $fixture -Revert
+          if ([IO.File]::ReadAllText($fixture) -cne $forwarded) {
+            throw 'S03 Caddy -Revert dry-run mutated the fixture.'
+          }
           [IO.File]::WriteAllText($fixture, 'unexpected unrelated file')
           $failed = $false
           try { ./scripts/s03_caddy_gateway.ps1 -Caddyfile $fixture }
