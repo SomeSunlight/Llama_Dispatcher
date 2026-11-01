@@ -21,7 +21,8 @@ param(
     [string]$CaddyExe,
     [string]$DpapiKeyFile,
     [string]$ApiBaseUrl,
-    [switch]$Apply
+    [switch]$Apply,
+    [switch]$Revert
 )
 
 Set-StrictMode -Version Latest
@@ -35,24 +36,34 @@ if (-not $source.Contains('handle /v1/*') -or
 }
 
 $removePattern = '(?m)^(?<indent>[ \t]*)header_up[ \t]+-Authorization[ \t]*(?<cr>\r?)$'
-$alreadyPattern = '(?m)^[ \t]*header_up[ \t]+Authorization[ \t]+\{http\.request\.header\.Authorization\}[ \t]*\r?$'
+$alreadyPattern = '(?m)^(?<indent>[ \t]*)header_up[ \t]+Authorization[ \t]+\{http\.request\.header\.Authorization\}[ \t]*(?<cr>\r?)$'
 $oldCount = [regex]::Matches($source, $removePattern).Count
 $newCount = [regex]::Matches($source, $alreadyPattern).Count
-if ($oldCount -eq 1 -and $newCount -eq 0) {
-    $patched = [regex]::Replace($source, $removePattern,
-        '${indent}header_up Authorization {http.request.header.Authorization}${cr}')
+if ($oldCount -gt 1 -or $newCount -gt 1 -or ($oldCount + $newCount) -ne 1) {
+    throw 'Unexpected Authorization forwarding configuration; no changes made.'
 }
-elseif ($oldCount -eq 0 -and $newCount -eq 1) {
-    $patched = $source
+if ($Revert) {
+    $patched = if ($newCount -eq 1) {
+        [regex]::Replace($source, $alreadyPattern,
+            '${indent}header_up -Authorization${cr}')
+    } else { $source }
 }
 else {
-    throw 'Unexpected Authorization forwarding configuration; no changes made.'
+    $patched = if ($oldCount -eq 1) {
+        [regex]::Replace($source, $removePattern,
+            '${indent}header_up Authorization {http.request.header.Authorization}${cr}')
+    } else { $source }
 }
 
 Write-Host '[S03] Existing public /v1/ -> 127.0.0.1:8001 preserved.'
 Write-Host '[S03] Existing direct /strata/v1/ -> Strata preserved.'
 if (-not $Apply) {
-    Write-Host '[S03] Dry run only. With -Apply, Caddy will forward its validated Bearer token to S02.'
+    if ($Revert) {
+        Write-Host '[S03] Dry run: with -Revert -Apply, Caddy restores the old header stripping for legacy Dispatcher.'
+    }
+    else {
+        Write-Host '[S03] Dry run: with -Apply, Caddy forwards its validated Bearer token to S02.'
+    }
     return
 }
 if (-not $CaddyExe -or -not $DpapiKeyFile -or -not $ApiBaseUrl) {
@@ -80,12 +91,14 @@ $backup = "$Caddyfile.s03-backup-$(Get-Date -Format yyyyMMddHHmmss)"
 try {
     $env:SPEEDY_API_KEY = $key
 
-    # Do not reload Caddy until the intended local authenticated Dispatcher
-    # actually answers (old and new instances must not compete for the port).
-    $local = Invoke-WebRequest -Uri 'http://127.0.0.1:8001/v1/models' `
-        -Headers $headers -NoProxy -TimeoutSec 10 -SkipHttpErrorCheck
-    if ([int]$local.StatusCode -ne 200) {
-        throw 'Dispatcher S02 did not accept the existing key on loopback port 8001.'
+    # Forward mode requires an authenticated S03 Dispatcher before Caddy cutover.
+    # Revert mode can safely restore header stripping without a running Dispatcher.
+    if (-not $Revert) {
+        $local = Invoke-WebRequest -Uri 'http://127.0.0.1:8001/v1/models' `
+            -Headers $headers -NoProxy -TimeoutSec 10 -SkipHttpErrorCheck
+        if ([int]$local.StatusCode -ne 200) {
+            throw 'Dispatcher S02 did not accept the existing key on loopback port 8001.'
+        }
     }
 
     if ($patched -ne $source) {
@@ -109,17 +122,27 @@ try {
         ([string]$anon.Content).Trim() -ne 'Unauthorized') {
         throw 'Public Caddy unauthorized gate did not return its exact 401 response.'
     }
-    $authorized = Invoke-WebRequest -Uri ($ApiBaseUrl.TrimEnd('/') + '/v1/models') `
-        -Headers $headers -NoProxy -TimeoutSec 10 -SkipHttpErrorCheck
-    if ([int]$authorized.StatusCode -ne 200) {
-        throw 'Caddy /v1/models did not reach authenticated Dispatcher.'
+    if ($Revert) {
+        $direct = Invoke-WebRequest -Uri ($ApiBaseUrl.TrimEnd('/') + '/strata/v1/models') `
+            -Headers $headers -NoProxy -TimeoutSec 10 -SkipHttpErrorCheck
+        if ([int]$direct.StatusCode -ne 200) {
+            throw 'Existing direct Strata fallback did not return HTTP 200.'
+        }
+        Write-Host '[S03] Legacy Authorization stripping restored; direct Strata path verified.'
     }
-    $models = ConvertFrom-Json -InputObject ([string]$authorized.Content)
-    if (-not @($models.data | Where-Object { $_.id -eq 'agent' }).Count) {
-        throw 'Public /v1/models does not advertise the expected agent alias.'
+    else {
+        $authorized = Invoke-WebRequest -Uri ($ApiBaseUrl.TrimEnd('/') + '/v1/models') `
+            -Headers $headers -NoProxy -TimeoutSec 10 -SkipHttpErrorCheck
+        if ([int]$authorized.StatusCode -ne 200) {
+            throw 'Caddy /v1/models did not reach authenticated Dispatcher.'
+        }
+        $models = ConvertFrom-Json -InputObject ([string]$authorized.Content)
+        if (-not @($models.data | Where-Object { $_.id -eq 'agent' }).Count) {
+            throw 'Public /v1/models does not advertise the expected agent alias.'
+        }
+        Write-Host '[S03] Public gate 401 and authorized Dispatcher alias 200 verified.'
+        Write-Host '[S03] Direct /strata/v1/ fallback left unchanged.'
     }
-    Write-Host '[S03] Public gate 401 and authorized Dispatcher alias 200 verified.'
-    Write-Host '[S03] Direct /strata/v1/ fallback left unchanged.'
 }
 catch {
     $reason = $_.Exception.Message
