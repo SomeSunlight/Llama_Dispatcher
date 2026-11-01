@@ -355,7 +355,29 @@ To retain the working direct route, Goose can immediately be pointed back
 to `/strata/v1`; the Caddy routing for that path never changes.
 The stage Dispatcher is **foreground-only** in the first console: closing
 it or pressing Ctrl+C stops that listener, so `/v1` is then unavailable
-until the previous Dispatcher returns. This is intentionally **not**
+until the previous Dispatcher returns.
+
+**Before restarting any legacy unauthenticated Dispatcher on 8001, undo
+the S02 Authorization forwarding.** Otherwise Caddy would pass its shared
+Bearer secret into the legacy, potentially permissive proxy. The same
+Caddy script supports explicit and verified restoration:
+
+```powershell
+./scripts/s03_caddy_gateway.ps1 -Caddyfile 'C:\Caddy\Caddyfile' -Revert
+./scripts/s03_caddy_gateway.ps1 `
+  -Caddyfile 'C:\Caddy\Caddyfile' `
+  -CaddyExe 'C:\Caddy\caddy_windows_amd64_custom.exe' `
+  -DpapiKeyFile 'C:\Caddy\speedy-api-key.dpapi' `
+  -ApiBaseUrl 'https://YOUR-EXISTING-DOMAIN' -Revert -Apply
+```
+
+This re-establishes the original `header_up -Authorization` while
+checking Caddy's public 401 and the separately authenticated direct
+Strata route. It can run with the test Dispatcher stopped; it does not
+need an active legacy backend. Only after this reversion, return
+to the accepted legacy start path.
+
+This temporary foreground trial is intentionally **not**
 the final persistent host supervisor. Do not run it as a Windows
 startup task or replace the working Strata/Caddy start script.
 Full lifecycle management belongs to the AI Workstation's Process Compose
