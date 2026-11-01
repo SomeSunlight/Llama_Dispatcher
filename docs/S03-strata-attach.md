@@ -306,7 +306,7 @@ reasoning model. The S03 one-shot smoke already separately exercises
 
 This script changes **one** upstream header directive and preserves the
 original upstream 8001, both routes, and the current DuckDNS token
-*byte-for-byte except for that directive*. It **never commits, prints or
+unchanged in content (the file may be re-encoded as UTF-8). It **never commits, prints or
 uploads** the user's Caddyfile or API keys. Dry-run first:
 
 ```powershell
