@@ -104,6 +104,44 @@ The smoke runner refuses remote/non-loopback Dispatcher URLs. For tests from
 the laptop, use an SSH tunnel or the existing authenticated Caddy route only
 after the local gate passes. Do **not** repoint production clients yet.
 
+### One-command smoke (recommended)
+
+In PowerShell 7 on Speedy, work from a **separate checkout** of PR #27:
+
+```powershell
+git clone --branch feature/s03-strata-attach-issue11 `
+    https://github.com/SomeSunlight/Llama_Dispatcher.git Llama_Dispatcher_S03
+cd Llama_Dispatcher_S03
+uv sync --frozen
+./scripts/s03_speedy_smoke.ps1
+```
+
+The command securely asks for the **existing native Strata API key** if
+`STRATA_NATIVE_KEY` is not already set, discovers Strata's real model ID,
+generates an isolated, disposable S02 client token, starts its own loopback
+test Dispatcher, performs *read-only* HTTP discovery/auth/policy checks and
+stops **only the test Dispatcher**. It leaves native Strata and Caddy alone.
+
+When that passes, explicitly opt into two small **real** Strata requests and
+SQLite verification:
+
+```powershell
+./scripts/s03_speedy_smoke.ps1 -Inference
+```
+
+A sanitized report is kept at `%LOCALAPPDATA%\Llama_Dispatcher\S03\`.
+This test may use Strata's existing model/VRAM/CPU, but does not launch,
+restart, calibrate or change the native service. If its loopback port 18001 is
+already occupied, stop only the *previous disposable test Dispatcher* or choose
+another port via `-DispatcherPort 18002`. Do not stop the production Strata
+service. Existing Speedy production routes stay unchanged.
+
+**The manual procedure below is optional.** Use it to inspect every stage,
+leave a test Dispatcher running for Goose/Open WebUI experiments, or control
+the environment more precisely.
+
+### Manual step-by-step setup
+
 In PowerShell, from the separate PR-branch checkout:
 
 ```powershell
