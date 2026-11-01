@@ -47,6 +47,40 @@ jobs:
               exit 1
             }
           }
+      - name: S03 Caddy gateway dry-run (synthetic only)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $fixture = Join-Path $env:RUNNER_TEMP 's03-test-Caddyfile'
+          $sample = @'
+          example.test {
+            @unauthorizedAI {
+              path /v1/* /strata/v1/*
+              not header Authorization "Bearer {$SPEEDY_API_KEY}"
+            }
+            route {
+              handle /strata/v1/* {
+                reverse_proxy 127.0.0.1:8080
+              }
+              handle /v1/* {
+                reverse_proxy 127.0.0.1:8001 {
+                  header_up -Authorization
+                }
+              }
+            }
+          }
+          '@
+          [IO.File]::WriteAllText($fixture, ($sample -replace "`r?`n", "`r`n"))
+          $before = [IO.File]::ReadAllText($fixture)
+          ./scripts/s03_caddy_gateway.ps1 -Caddyfile $fixture
+          if ([IO.File]::ReadAllText($fixture) -cne $before) {
+            throw 'S03 Caddy dry-run mutated the fixture.'
+          }
+          [IO.File]::WriteAllText($fixture, 'unexpected unrelated file')
+          $failed = $false
+          try { ./scripts/s03_caddy_gateway.ps1 -Caddyfile $fixture }
+          catch { $failed = $true }
+          if (-not $failed) { throw 'S03 Caddy accepted an unrelated Caddyfile.' }
       - name: Verify generated ContextCanon output
         if: runner.os == 'Linux'
         run: |
