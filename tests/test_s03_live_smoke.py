@@ -14,7 +14,7 @@ from unittest.mock import patch
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 from scripts.s03_live_smoke import (  # noqa: E402
-    SmokeError, loopback_url, last_rowid, new_audit_rows, run,
+    SmokeError, has_chat_answer, loopback_url, last_rowid, new_audit_rows, run, stream_chat,
 )
 
 
@@ -27,6 +27,48 @@ class SmokeRunnerContracts(unittest.TestCase):
                     "http://127.0.0.1:18001?token=secret"):
             with self.subTest(url=url), self.assertRaises(SmokeError):
                 loopback_url(url)
+
+    def test_visible_chat_answer_is_required(self):
+        self.assertFalse(has_chat_answer({"choices": [{"message": {"content": ""}}]}))
+        self.assertFalse(has_chat_answer({"choices": [{"message": {"reasoning_content": "thinking"}}]}))
+        self.assertFalse(has_chat_answer({"choices": []}))
+        self.assertTrue(has_chat_answer({"choices": [{"message": {"content": "OK"}}]}))
+
+    def test_reasoning_only_stream_fails_even_with_done(self):
+        class FakeResponse:
+            status = 200
+            headers = {"content-type": "text/event-stream"}
+            def __enter__(self):
+                return self
+            def __exit__(self, *_):
+                return False
+            def __iter__(self):
+                return iter((
+                    b'data: {"choices":[{"delta":{"reasoning_content":"thinking"}}]}\\n',
+                    b'data: [DONE]\\n',
+                ))
+        with patch("scripts.s03_live_smoke.request.urlopen", return_value=FakeResponse()):
+            with self.assertRaisesRegex(SmokeError, "only reasoning/no visible answer"):
+                stream_chat("http://127.0.0.1:18001", "example", {"stream": True}, 3)
+
+    def test_stream_with_visible_answer_passes(self):
+        class FakeResponse:
+            status = 200
+            headers = {"content-type": "text/event-stream"}
+            def __enter__(self):
+                return self
+            def __exit__(self, *_):
+                return False
+            def __iter__(self):
+                return iter((
+                    b'data: {"choices":[{"delta":{"reasoning_content":"thinking"}}]}\\n',
+                    b'data: {"choices":[{"delta":{"content":"OK"}}]}\\n',
+                    b'data: [DONE]\\n',
+                ))
+        with patch("scripts.s03_live_smoke.request.urlopen", return_value=FakeResponse()):
+            result = stream_chat("http://127.0.0.1:18001", "example", {"stream": True}, 3)
+        self.assertTrue(result["answer_present"])
+        self.assertEqual(result["data_events"], 2)
 
     def test_read_only_sqlite_audit_filter(self):
         with tempfile.TemporaryDirectory() as d:
