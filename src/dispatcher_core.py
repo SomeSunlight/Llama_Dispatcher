@@ -1951,7 +1951,9 @@ def main():
 
         app.router.lifespan_context = attach_lifespan
         print(f"[ATTACH] Serving {len(attached.aliases)} aliases for externally managed Strata.")
-        uvicorn.run(app, host="0.0.0.0", port=api_port)
+        # S03 attach is test-only until owner accepts a separate ingress cutover.
+        # Keep it on loopback; existing Caddy direct Strata route is untouched.
+        uvicorn.run(app, host="127.0.0.1", port=api_port)
         return
 
     if args.mode == "serve":
