@@ -100,6 +100,20 @@ def new_audit_rows(db_file: Path, after_rowid: int, client_id: str,
     ]
 
 
+def has_chat_answer(reply: dict) -> bool:
+    """Detect actual user-visible answer content, never retain it in a report."""
+    choices = reply.get("choices")
+    if not isinstance(choices, list):
+        return False
+    return any(
+        isinstance(choice, dict)
+        and isinstance(choice.get("message"), dict)
+        and isinstance(choice["message"].get("content"), str)
+        and bool(choice["message"]["content"].strip())
+        for choice in choices
+    )
+
+
 def stream_chat(base: str, token: str, payload: dict, timeout: float) -> dict:
     headers = {"authorization": "Bearer " + token, "content-type": "application/json",
                "accept": "text/event-stream"}
@@ -107,6 +121,7 @@ def stream_chat(base: str, token: str, payload: dict, timeout: float) -> dict:
                           data=json.dumps(payload).encode(), method="POST", headers=headers)
     events = 0
     done = False
+    had_answer = False
     started = time.monotonic()
     try:
         with request.urlopen(req, timeout=timeout) as resp:
@@ -126,6 +141,15 @@ def stream_chat(base: str, token: str, payload: dict, timeout: float) -> dict:
                 except ValueError:
                     raise SmokeError("Stream contains invalid JSON data events.") from None
                 require(isinstance(obj, dict), "Stream data event is not a JSON object.")
+                # Reasoning-only deltas are not an answer to the user.
+                for choice in obj.get("choices", []) if isinstance(obj.get("choices"), list) else []:
+                    if not isinstance(choice, dict):
+                        continue
+                    delta = choice.get("delta")
+                    if isinstance(delta, dict):
+                        content = delta.get("content")
+                        if isinstance(content, str) and content.strip():
+                            had_answer = True
                 events += 1
     except error.HTTPError as exc:
         code = exc.code
@@ -135,8 +159,9 @@ def stream_chat(base: str, token: str, payload: dict, timeout: float) -> dict:
         raise SmokeError(f"Streaming inference transport failed ({type(exc).__name__}).") from None
     require(events > 0, "No SSE JSON data events arrived.")
     require(done, "Streaming inference did not end with data: [DONE].")
+    require(had_answer, "Streaming returned only reasoning/no visible answer; check max_tokens and reasoning_budget_tokens.")
     return {"http_status": 200, "data_events": events, "done": done,
-            "duration_s": round(time.monotonic() - started, 3)}
+            "answer_present": True, "duration_s": round(time.monotonic() - started, 3)}
 
 
 def run(args: argparse.Namespace) -> dict:
@@ -185,7 +210,9 @@ def run(args: argparse.Namespace) -> dict:
 
     test_payload = {
         "model": alias, "messages": [{"role": "user", "content": "S03 synthetic check; respond OK."}],
-        "temperature": 0.913, "max_tokens": 32, "stream": False,
+        # Thinking tokens count toward max_tokens; leave room for a real answer.
+        "temperature": 0.913, "max_tokens": 768,
+        "reasoning_budget_tokens": 192, "stream": False,
     }
     code, preview = send(base, "/debug/preview", token, test_payload)
     require(code == 200 and preview.get("original_model") == alias and
@@ -221,7 +248,9 @@ def run(args: argparse.Namespace) -> dict:
     code, obj = send(base, "/v1/chat/completions", token, test_payload, args.timeout)
     require(code == 200 and isinstance(obj.get("choices"), list),
             f"Nonstream native inference failed or returned a non-chat payload (HTTP {code}).")
-    checks["nonstream_inference"] = {"http_status": code,
+    require(has_chat_answer(obj),
+            "Nonstream reply contains no visible answer; thinking may have consumed max_tokens.")
+    checks["nonstream_inference"] = {"http_status": code, "answer_present": True,
                                      "choices": len(obj["choices"])}
     streamed = {**test_payload, "stream": True}
     checks["stream_inference"] = stream_chat(base, token, streamed, args.timeout)
