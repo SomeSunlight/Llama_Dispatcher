@@ -91,6 +91,126 @@ Laptop/Windows in this development window.
   restarts it. A stopped/unloaded Strata might advertise auto-load; do not
   conflate endpoint discovery with native model readiness.
 
+## Speedy real-HTTP acceptance (owner gate, 2026-11-01)
+
+Run this **locally in PowerShell 7 on Speedy/Windows**. Keep its existing
+native Strata (127.0.0.1:8080) and direct Caddy route exactly as they are.
+Use a **separate clone/check-out of PR #27** and a **new private instance
+`Speedy_S03_Test`**, so the test does not touch existing Dispatcher instances
+or their SQLite databases. Only the test Dispatcher listens on 127.0.0.1:18001;
+neither it nor the smoke runner owns the already-running Strata process.
+
+The smoke runner refuses remote/non-loopback Dispatcher URLs. For tests from
+the laptop, use an SSH tunnel or the existing authenticated Caddy route only
+after the local gate passes. Do **not** repoint production clients yet.
+
+In PowerShell, from the separate PR-branch checkout:
+
+```powershell
+# Set to your actual separate PR checkout on Speedy.
+$repo = (Get-Location).Path
+$private = Join-Path $env:LOCALAPPDATA "Llama_Dispatcher\S03"
+New-Item -ItemType Directory -Force $private | Out-Null
+
+# Reuse Strata's already-configured native API key, without printing it.
+# Only if this shell does not already have STRATA_NATIVE_KEY:
+if (-not $env:STRATA_NATIVE_KEY) {
+    $secret = Read-Host "Existing native Strata API key" -AsSecureString
+    $env:STRATA_NATIVE_KEY = [System.Net.NetworkCredential]::new("", $secret).Password
+}
+
+# Discover the *real* Strata model ID; do not assume that it is 'strata'.
+$models = Invoke-RestMethod -Uri "http://127.0.0.1:8080/v1/models" `
+    -Headers @{ Authorization = "Bearer $env:STRATA_NATIVE_KEY" }
+$nativeId = $models.data[0].id
+if (-not $nativeId) { throw "No native model advertised by running Strata." }
+Write-Host "Native model ID: $nativeId"
+
+# A disposable S02 test identity: keep the token in an environment variable;
+# persist only its hash in the private client-auth JSON.
+$env:S03_SMOKE_CLIENT_TOKEN = [Convert]::ToHexString(
+    [Security.Cryptography.RandomNumberGenerator]::GetBytes(32))
+$bytes = [Text.Encoding]::UTF8.GetBytes($env:S03_SMOKE_CLIENT_TOKEN)
+$digest = [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData($bytes)).ToLowerInvariant()
+$env:DISPATCHER_CLIENT_CONFIG = Join-Path $private "s03-smoke-clients.json"
+@{
+    schema_version = 1
+    clients = @(@{ id = "s03-smoke"; token_sha256 = $digest; policy = "enforce" })
+} | ConvertTo-Json -Depth 5 | Set-Content -Encoding utf8 $env:DISPATCHER_CLIENT_CONFIG
+
+$attach = Join-Path $private "s03-smoke-attach.json"
+@{
+    schema_version = 1
+    endpoint = "http://127.0.0.1:8080"
+    credential_env = "STRATA_NATIVE_KEY"
+    aliases = @{
+        agent = @{ model = $nativeId; parameters = @{ temperature = 0.2 } }
+    }
+} | ConvertTo-Json -Depth 6 | Set-Content -Encoding utf8 $attach
+
+# Keep the test server in an isolated background PowerShell process.
+# Stopping the Job stops only this test Dispatcher, not native Strata.
+$job = Start-Job -ScriptBlock {
+    param($root, $attachPath, $clientFile, $nativeKey)
+    $env:DISPATCHER_CLIENT_CONFIG = $clientFile
+    $env:STRATA_NATIVE_KEY = $nativeKey
+    Set-Location $root
+    uv run --frozen python src/dispatcher.py serve `
+        --instance Speedy_S03_Test --api-port 18001 --strata-config $attachPath
+} -ArgumentList $repo, $attach, $env:DISPATCHER_CLIENT_CONFIG, $env:STRATA_NATIVE_KEY
+```
+
+Check that the Job remains running before sending requests:
+
+```powershell
+Get-Job $job
+Receive-Job $job -Keep
+```
+
+The test instance directory and SQLite database are created under
+`instances/Speedy_S03_Test/data/metrics.db` by the Dispatcher; they do not
+belong to the existing Speedy_Win production instance.
+
+**First:** read-only discovery/auth/policy tests and locally denied management
+route, **no inference**:
+
+```powershell
+$db = Join-Path $repo "instances\Speedy_S03_Test\data\metrics.db"
+uv run --frozen python scripts/s03_live_smoke.py `
+    --base-url http://127.0.0.1:18001 --alias agent
+```
+
+**Then, only when ready:** two tiny *real* Strata calls (nonstream and
+streaming), followed by a read-only inspection of SQLite records for exactly
+this test client and the selected alias:
+
+```powershell
+uv run --frozen python scripts/s03_live_smoke.py `
+    --base-url http://127.0.0.1:18001 --alias agent `
+    --client-id s03-smoke --db $db --inference `
+    --report (Join-Path $private "s03-live-report.json")
+```
+
+The report records only codes, alias/model identity, selected policy, bounded
+timing/event counts and sanitized SQLite metadata. It saves **no bearer key,
+prompt, tools or generated response content**. If a smoke check fails, report
+its error and the relevant **redacted** Strata/Dispatcher logs; do not paste
+private credentials.
+
+To stop **only** the test Dispatcher:
+
+```powershell
+Stop-Job $job
+Receive-Job $job -Keep
+Remove-Job $job
+```
+
+The direct Caddy /strata/v1 route remains untouched. Before a production
+cutover, separately test the real Goose/Open WebUI endpoints, client
+credentials, long reasoning/tool traces, SSE cancellation, vision and actual
+native behavior/response quality. Two tiny chat calls are necessary evidence
+for HTTP attach, **not** complete production acceptance.
+
 ## Automated review evidence
 
 No native model is required for the deterministic tests:
