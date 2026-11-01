@@ -44,8 +44,8 @@ class SmokeRunnerContracts(unittest.TestCase):
                 return False
             def __iter__(self):
                 return iter((
-                    b'data: {"choices":[{"delta":{"reasoning_content":"thinking"}}]}\\n',
-                    b'data: [DONE]\\n',
+                    b'data: {"choices":[{"delta":{"reasoning_content":"thinking"}}]}\n',
+                    b'data: [DONE]\n',
                 ))
         with patch("scripts.s03_live_smoke.request.urlopen", return_value=FakeResponse()):
             with self.assertRaisesRegex(SmokeError, "only reasoning/no visible answer"):
@@ -61,9 +61,9 @@ class SmokeRunnerContracts(unittest.TestCase):
                 return False
             def __iter__(self):
                 return iter((
-                    b'data: {"choices":[{"delta":{"reasoning_content":"thinking"}}]}\\n',
-                    b'data: {"choices":[{"delta":{"content":"OK"}}]}\\n',
-                    b'data: [DONE]\\n',
+                    b'data: {"choices":[{"delta":{"reasoning_content":"thinking"}}]}\n',
+                    b'data: {"choices":[{"delta":{"content":"OK"}}]}\n',
+                    b'data: [DONE]\n',
                 ))
         with patch("scripts.s03_live_smoke.request.urlopen", return_value=FakeResponse()):
             result = stream_chat("http://127.0.0.1:18001", "example", {"stream": True}, 3)
