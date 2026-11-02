@@ -118,3 +118,22 @@ This isolated context-maintenance block is tracked by [PR #25](https://github.co
 - [x] Reconcile the post-merge accepted baseline in `PLAN.md`; S03 #11 is the next independently reviewed implementation block.
 
 Future ContextCanon authoring/discovery improvements and the generated project map are tracked separately in [context-canon #123](https://github.com/SomeSunlight/context-canon/issues/123) and [#124](https://github.com/SomeSunlight/context-canon/issues/124), and are not prerequisites for this PR.
+
+## 10. S03 implementation checkpoint — [#11](https://github.com/SomeSunlight/Llama_Dispatcher/issues/11)
+
+**Status (2026-11-01):** draft review [PR #27](https://github.com/SomeSunlight/Llama_Dispatcher/pull/27), mock/CI verified; **real Speedy Strata connection is still awaiting owner testing**. The travel-laptop attempted Qwen3.6 UD-Q4_K_XL native Strata boot but failed on RTX 500 Ada 4-GiB VRAM before engine readiness (missing 1159 MiB for hybrid expert buffers); this is hardware capacity, not an S03 HTTP result. Speedy/Windows already operates native Strata successfully. Scope is opt-in, attached HTTP, no instance migration or Caddy cutover.
+
+- [x] Verify accepted S02/PR #25/#26 baseline and establish a separate S03 review branch.
+- [x] Define strict attach configuration, credential isolation, request reasoning resolution and unavailable behavior in deterministic contract tests.
+- [x] Implement Strata HTTP attachment and probe/alias/proxy with no engine subprocess or lifecycle control; keep llama.cpp serve, bench, eval and legacy proxy unchanged.
+- [x] Verify HTTP status, SSE/cancellation, tool/vision content forwarding, authentication separation, redacted debug previews and existing S00–S02 regressions in 87 mock/unit tests on Windows and Ubuntu CI. This is not native Strata validation.
+- [x] Document laptop-first smoke/rollback, automated observations and deferred Speedy owner gates; open draft review PR #27.
+- [x] Record the failed native **laptop** model initialization as an unrelated host-memory limit; do not require further laptop model downloads to advance S03.
+- [x] Prepare a **real Speedy/Windows owner smoke**: one-command disposable PowerShell launch, native model-ID discovery, independent S02 test identity, strict loopback-only Dispatcher bind, explicit no-inference discovery first, opt-in tiny real nonstream+SSE, read-only SQLite audit inspection, sanitized report and cleanup. Add isolated tests and Windows PowerShell syntax CI; keep native Strata and Caddy intact.
+- [ ] Owner runs `scripts/s03_speedy_smoke.ps1` on Speedy with its already-running Strata; then opts into `-Inference`. Record actual API compatibility, model ID, policy outcome, streaming, SQLite evidence, exceptions and engine version, without sharing keys or prompt content.
+- [x] After the first Speedy native smoke, add an owner-controlled existing-gateway trial: a foreground-only S03 Dispatcher on the existing port 8001 in a separate instance, one transitional hashed S02 `home-gateway` identity derived from Speedy's DPAPI secret, explicit Caddy Authorization forwarding (dry-run by default, opt-in apply/rollback), and a Goose/WSL checklist without adding an HTTPS route. Keep Strata/Caddy native process ownership unchanged.
+- [x] Extend Windows CI to syntax-check both scripts and exercise a synthetic CRLF Caddyfile dry run without altering it; verify Linux regressions on code head `85498aee37deb1001683ad3e63f5647ae2f4048a` ([run #41362797438](https://github.com/SomeSunlight/Llama_Dispatcher/actions/runs/41362797438)). **No real Caddy reload has been performed by this PR.**
+- [ ] Owner runs the long-lived S03 foreground trial on Speedy (checking that 8001 is free), applies the gateway change only after the local S02 auth checks, and verifies Goose from Laptop/WSL uses the existing Caddy `/v1` route.
+- [ ] Owner separately verifies representative complex Goose/Open WebUI traffic, reasoning/tools/vision/cancellation on Speedy; keep the direct Caddy `/strata/v1` path available. This is the meaningful functional acceptance; no automatic production cutover.
+- [ ] Owner reviews actual evidence and explicitly approves; perform exact-head checks before a separately authorized merge. Speedy/Caddy/Goose/Open WebUI production cutover is a different owner gate.
+
