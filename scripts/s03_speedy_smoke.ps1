@@ -15,6 +15,9 @@ $ErrorActionPreference = "Stop"
 $repo = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 $dispatcherUrl = "http://127.0.0.1:$DispatcherPort"
 $private = Join-Path $env:LOCALAPPDATA "Llama_Dispatcher\S03"
+. (Join-Path $PSScriptRoot 'Filesystem.ps1')
+# Only older, completely fileless tool-owned skeletons are eligible.
+Clear-EmptyDispatcherSmokeSessions -Root $private
 $sessionDir = Join-Path $private ("session-" + [guid]::NewGuid().ToString("N"))
 $report = Join-Path $private ("s03-live-" + (Get-Date -Format "yyyyMMdd-HHmmss") + ".json")
 $clientFile = Join-Path $sessionDir "clients.json"
@@ -145,7 +148,15 @@ finally {
             Write-Host "[S03] Disposable test Dispatcher listener stopped."
         }
     }
-    Remove-Item -LiteralPath $sessionDir -Recurse -Force -ErrorAction SilentlyContinue
+    try {
+        if (-not (Remove-DispatcherSmokeSession -Path $sessionDir -Root $private)) {
+            Write-Warning "S03 temporary session remains locked: $sessionDir. Cleanup can retry later."
+        }
+    }
+    catch {
+        # Do not mask the original test result or fail to restore credentials.
+        Write-Warning "S03 temporary cleanup refused: $($_.Exception.Message)"
+    }
     [Environment]::SetEnvironmentVariable("STRATA_NATIVE_KEY", $previousNative, "Process")
     [Environment]::SetEnvironmentVariable("DISPATCHER_CLIENT_CONFIG", $previousClientConfig, "Process")
     [Environment]::SetEnvironmentVariable("S03_SMOKE_CLIENT_TOKEN", $previousSmokeToken, "Process")
