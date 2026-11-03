@@ -1,3 +1,14 @@
+## Review block — resilient owned-directory cleanup (#28)
+
+Purpose: apply the shared [Development Workflow cleanup method](https://github.com/SomeSunlight/context-canon/blob/main/nodes/library/development-workflow/docs/filesystem-cleanup.md), tracking [Issue #28](https://github.com/SomeSunlight/Llama_Dispatcher/issues/28). No inference/runtime ownership changes, no auto-accepted Context pins.
+
+- [x] Replace S02 disposable private-client TemporaryDirectory cleanup with bounded retry, safe link refusal, and non-masking warnings for persistent locks.
+- [x] Replace S03 Windows silent recursive deletion with one scoped helper, bounded retry, and later pruning of only stale, fileless owned session skeletons.
+- [x] Add offline Python and Windows PowerShell regression fixtures and CI coverage.
+- [ ] Verify exact-head Ubuntu/Windows CI and owner review; do not merge without explicit acceptance.
+
+---
+
 # PLAN — Multi-engine Dispatcher: attach-first, external process supervision
 
 **Planning revision:** 2026-10-25 (S02 and PR #25 accepted baselines recorded; runtime design unchanged).
