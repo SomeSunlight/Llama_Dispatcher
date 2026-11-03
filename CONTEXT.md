@@ -8,12 +8,12 @@
 > Edit [CONTEXT.src.md](CONTEXT.src.md) instead.
 
 **Node:** Llama Dispatcher  
-**Context version:** `0.1.3-draft`
+**Context version:** `0.1.4-draft`
 
 **Resulting imported Contexts:**
 
-- **Development Workflow** — `0.3.7-draft` — via Parent Context **GitHub** — [inspect accepted carrier](.context/versions/c41ca4eefdfd62c8/CONTEXT.md)
-- **GitHub** — `0.1.8-draft` — direct Parent Context — [inspect accepted carrier](.context/versions/c41ca4eefdfd62c8/CONTEXT.md)
+- **Development Workflow** — `0.3.8-draft` — via Parent Context **GitHub** — [inspect accepted carrier](.context/versions/dbdfd1055f0f7f14/CONTEXT.md)
+- **GitHub** — `0.1.9-draft` — direct Parent Context — [inspect accepted carrier](.context/versions/dbdfd1055f0f7f14/CONTEXT.md)
 
 ## Local Overview
 
@@ -61,6 +61,12 @@ When Markdown is also parsed, compiled, extracted, or otherwise given machine-si
 #### `CCW-015` — Render repository-local Markdown links URL-safely
 
 When writing Markdown links to repository-local files or directories, keep the real filesystem path as the semantic source of truth but percent-encode the Markdown link destination as a URI path instead of embedding raw spaces or Markdown/URL-sensitive path characters.
+
+### Filesystem robustness
+
+#### `CCW-016` — Treat directory cleanup as best-effort, but authoritative data as strict
+
+For tool-owned disposable directories, use a shared bounded-retry deletion method, tolerate empty leftovers from temporary filesystem locks, and retry later. Never follow links or remove unknown files; fail on missing or corrupt authoritative data. Follow the detailed method in `docs/filesystem-cleanup.md`.
 
 ### Proportional verification
 
@@ -153,3 +159,11 @@ When adding or changing `--version`, package version lookup, or Git checkout pro
 **Required**
 
 - [`CONTEXT/references/ne68be75ed7bf392/docs/version-provenance-python.md`](CONTEXT/references/ne68be75ed7bf392/docs/version-provenance-python.md)
+
+### Resilient filesystem cleanup
+
+When implementing, modifying, reviewing, or troubleshooting deletion of generated or temporary files and directories on Windows, WSL or Linux:
+
+**Required**
+
+- [`CONTEXT/references/ne68be75ed7bf392/docs/filesystem-cleanup.md`](CONTEXT/references/ne68be75ed7bf392/docs/filesystem-cleanup.md)

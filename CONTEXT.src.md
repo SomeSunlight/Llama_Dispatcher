@@ -1,5 +1,5 @@
 # Llama Dispatcher — Local Context Source
-<!-- ctx:node id="e3e6391b-6eb7-4b2a-ba1d-f969a65bbf08" name="Llama Dispatcher" version="0.1.3-draft" -->
+<!-- ctx:node id="e3e6391b-6eb7-4b2a-ba1d-f969a65bbf08" name="Llama Dispatcher" version="0.1.4-draft" -->
 
 <!-- contextcanon:format Node
 Format: Node metadata follows the # title: ctx:node id="..." name="..." version="...". Preserve existing identity.
@@ -23,8 +23,8 @@ Details: CONTEXT-format.md
 <!-- contextcanon-placement-sources:start -->
 <!-- contextcanon-placement-sources:end -->
 
-- [GitHub](contextcanon.yaml) — `0.1.8-draft` — `relationship=parent`
-  <!-- ctx:source id="ccf4d7ee-4db1-4110-9ddc-5d70c69cf2bc" version="0.1.8-draft" normalized-digest="3efd3dfdfec720e048fb84df4db4f0d1ed86f1a9f5486314a482789c1bd2850b" package-digest="3e0883cbf8e963f29c028af8a73bcbe87123d7328b5b797c273d4faa38d5e3b9" -->
+- [GitHub](contextcanon.yaml) — `0.1.9-draft` — `relationship=parent`
+  <!-- ctx:source id="ccf4d7ee-4db1-4110-9ddc-5d70c69cf2bc" version="0.1.9-draft" normalized-digest="a9340895196dda1ef699240a31034fb65496a131561bd8a97ee60e9d8a2fc3a2" package-digest="d47864233115d029523dadf6d27ee5d9367e23eb4ad4ccde53d5eab02d3d6d6d" -->
 
 ## Local Overview
 
