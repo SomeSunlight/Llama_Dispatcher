@@ -20,7 +20,6 @@ import socket
 import sqlite3
 import subprocess
 import sys
-import tempfile
 import time
 from contextlib import closing
 from datetime import datetime, timezone
@@ -31,6 +30,7 @@ from urllib.request import Request, urlopen
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 from s00_provenance import find_launch, ProvenanceError  # noqa: E402
+from fs_cleanup import private_test_directory  # noqa: E402
 
 _INSTANCE_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9_-]{0,63}$")
 DEFAULT_URL = "http://127.0.0.1:8001"
@@ -595,8 +595,7 @@ def main() -> int:
             backup_old_database(args.instance)
             log_path = dispatcher_log_path(args.instance)
             print(f"  Dispatcher console log: {log_path}", flush=True)
-            with tempfile.TemporaryDirectory(prefix="s02-private-") as folder:
-                directory = Path(folder)
+            with private_test_directory() as directory:
                 tokens = auth_fixture(directory)
                 env = os.environ.copy()
                 env["DISPATCHER_CLIENT_CONFIG"] = str(directory / "clients.json")
