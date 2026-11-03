@@ -16,12 +16,16 @@ from pathlib import Path
 DELAYS = (0.0, 0.05, 0.15, 0.35)
 
 
+class UnsafeCleanupError(OSError):
+    """A path contains a link, junction or non-directory entry."""
+
+
 def _owned_directories(root: Path) -> list[Path]:
     """Reject links, junctions and uninspectable entries before recursion."""
     info = root.lstat()
     flag = getattr(stat, "FILE_ATTRIBUTE_REPARSE_POINT", 0)
     if not stat.S_ISDIR(info.st_mode) or getattr(info, "st_file_attributes", 0) & flag:
-        raise OSError(f"not an ordinary private fixture directory: {root}")
+        raise UnsafeCleanupError(f"not an ordinary private fixture directory: {root}")
     stack, folders = [root], []
     while stack:
         parent = stack.pop()
@@ -29,7 +33,7 @@ def _owned_directories(root: Path) -> list[Path]:
         for entry in parent.iterdir():
             attr = entry.lstat()
             if stat.S_ISLNK(attr.st_mode) or getattr(attr, "st_file_attributes", 0) & flag:
-                raise OSError(f"refusing linked/reparse fixture entry: {entry}")
+                raise UnsafeCleanupError(f"refusing linked/reparse fixture entry: {entry}")
             if stat.S_ISDIR(attr.st_mode):
                 stack.append(entry)
     return folders
@@ -58,6 +62,8 @@ def remove_private_fixture(root: Path, *, delays=DELAYS) -> bool:
             _owned_directories(root)
             shutil.rmtree(root)
             return True
+        except UnsafeCleanupError:
+            raise
         except OSError:
             if not root.exists():
                 return True
