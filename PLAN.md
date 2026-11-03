@@ -1,11 +1,15 @@
-## Review block — resilient owned-directory cleanup (#28)
+## Review gate — resilient owned-directory cleanup (#28 / PR #29)
 
-Purpose: apply the shared [Development Workflow cleanup method](https://github.com/SomeSunlight/context-canon/blob/main/nodes/library/development-workflow/docs/filesystem-cleanup.md), tracking [Issue #28](https://github.com/SomeSunlight/Llama_Dispatcher/issues/28). No inference/runtime ownership changes, no auto-accepted Context pins.
+**Status:** Implementation, accepted ContextCanon updates and owner Windows regression tests complete; final squash merge remains the owner's decision.
 
-- [x] Replace S02 disposable private-client TemporaryDirectory cleanup with bounded retry, safe link refusal, and non-masking warnings for persistent locks.
-- [x] Replace S03 Windows silent recursive deletion with one scoped helper, bounded retry, and later pruning of only stale, fileless owned session skeletons.
-- [x] Add offline Python and Windows PowerShell regression fixtures and CI coverage.
-- [ ] Verify exact-head Ubuntu/Windows CI and owner review; do not merge without explicit acceptance.
+Purpose: apply the shared [Development Workflow filesystem-cleanup contract](https://github.com/SomeSunlight/context-canon/blob/main/nodes/library/development-workflow/docs/filesystem-cleanup.md) to isolated S02/S03 test fixtures. Do not change inference-engine/process ownership, Strata, Caddy, SQLite or production gateway operation.
+
+- [x] Replace S02 disposable private-client TemporaryDirectory cleanup with bounded retry, safe link refusal and non-masking warnings for persistent locks.
+- [x] Replace S03 silent Windows recursive deletion with scoped, repeatable cleanup and later pruning of stale, recursively fileless owned session skeletons only.
+- [x] Add offline Python and Windows PowerShell regressions; owner ran and passed the isolated tests locally on Windows.
+- [x] Accept GitHub Parent `0.1.9-draft` with inherited Development Workflow `0.3.8-draft`, regenerate/verify the root and local Child ContextCanon packages; no hand-written pins.
+- [x] Confirm exact-head Ubuntu/native Windows CI for code plus ContextCanon acceptance ([run #41675465667](https://github.com/SomeSunlight/Llama_Dispatcher/actions/runs/41675465667)).
+- [ ] Owner reviews and squash-merges [PR #29](https://github.com/SomeSunlight/Llama_Dispatcher/pull/29); [Issue #28](https://github.com/SomeSunlight/Llama_Dispatcher/issues/28) closes only after merge.
 
 ---
 
