@@ -19,7 +19,7 @@ param(
 )
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
-if ($Stage -and $Revert) { throw 'Choose either -Stage or -Revert, not both.' }
+# -Revert previews by default; -Revert -Stage explicitly restores the backup.
 
 if (-not (Test-Path -LiteralPath $Caddyfile -PathType Leaf)) {
     throw 'Private Caddyfile not found; no changes made.'
