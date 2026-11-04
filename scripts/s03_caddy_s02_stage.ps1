@@ -24,6 +24,10 @@ $ErrorActionPreference = 'Stop'
 if (-not (Test-Path -LiteralPath $Caddyfile -PathType Leaf)) {
     throw 'Private Caddyfile not found; no changes made.'
 }
+if (((Get-Item -LiteralPath $Caddyfile -Force).Attributes -band
+     [IO.FileAttributes]::ReparsePoint) -ne 0) {
+    throw 'Refusing a linked Caddyfile.'
+}
 $real = (Resolve-Path -LiteralPath $Caddyfile).Path
 $source = [IO.File]::ReadAllText($real)
 $backup = $real + '.s02-before-multiclient'
@@ -35,6 +39,7 @@ $newForward = 'header_up Authorization {http.request.header.Authorization}'
 # Never infer Caddyfile semantics from one isolated line. Require the
 # exact reviewed matcher and both expected upstream routes.
 if ([regex]::Matches($source,'(?m)^\s*@unauthorizedAI\s*\{').Count -ne 1 -or
+    [regex]::Matches($source,'(?m)^\s*(?:respond|handle)\s+@unauthorizedAI\b').Count -ne 1 -or
     [regex]::Matches($source,'(?m)^\s*handle /v1/\* \{').Count -ne 1 -or
     [regex]::Matches($source,'(?m)^\s*handle /strata/v1/\* \{').Count -ne 1 -or
     [regex]::Matches($source,'(?m)^\s*reverse_proxy 127\.0\.0\.1:8001\s*\{').Count -ne 1 -or
