@@ -418,3 +418,69 @@ See the per-instance owner gates in PLAN §6.
 `main` build with its original llama.cpp serve configuration, or retain the
 direct Strata diagnostic Caddy `/strata/v1` route on Speedy. No schema
 migration, native Strata settings or instance files are changed by the PR.
+
+## Separate S02 application keys before native host startup (review issue #41)
+
+**Review-only extension**: [multi-client S03 draft PR #30](https://github.com/SomeSunlight/Llama_Dispatcher/pull/30)
+allows a separately configured Windows AI Workstation host to start the
+S03 attached Dispatcher with a **pre-existing hash-only** S02 registry.
+It never generates or transports original application keys.
+
+An existing S03 launch with no additional input still creates a
+single `home-gateway` transitional identity. For the multi-client
+path, add either an absolute `-ClientConfig '<private-clients.json>'` argument
+to `scripts/s03_speedy_gateway.ps1`, or provide the *nonsecret*
+`DISPATCHER_CLIENT_CONFIG` environment variable before invoking the
+script. If an explicit path is given, the path must exist and contain
+an S02 digest file; invalid/missing files **abort startup** rather than
+downgrading to the old shared key. Generated S02 original keys and native
+Strata's protected key stay separate; the S03 script only **reads**
+the external digest file, without rewriting it. Use separate client IDs
+for each Goose/Open WebUI application and an optional imported legacy
+key for rollback.
+
+### Offline Caddy preparation (no running services)
+
+The previous Caddy gateway checked one old Bearer key for both Dispatcher
+`/v1/*` and direct native Strata `/strata/v1/*`, and stripped the
+client Authorization header before proxying to Dispatcher. This blocks
+independent S02 application identities.
+
+The new private Caddyfile stage helper `scripts/s03_caddy_s02_stage.ps1`
+requires the **exact reviewed topology**: an active `@unauthorizedAI`
+matcher, two explicitly routed backends, the existing key on the direct
+native Strata path, and the legacy stripped Dispatcher header. It changes
+the matcher so **only direct `/strata/v1/*`** still requires the existing
+gateway key, and forwards the original application Authorization header
+on Dispatcher `/v1/*`. Dispatcher itself MUST authenticate every S02
+client and reject unknown/missing keys with HTTP 401.
+
+For an operator-local installation, using the actual private absolute paths:
+
+```powershell
+# Read-only preview; nothing starts or changes:
+./scripts/s03_caddy_s02_stage.ps1 -Caddyfile '<private-Caddyfile>'
+
+# Only while the old Caddy is STOPPED; validates with the installed Caddy:
+./scripts/s03_caddy_s02_stage.ps1 -Caddyfile '<private-Caddyfile>' `
+  -CaddyExe '<actual-caddy.exe>' -DpapiKeyFile '<existing-gateway.dpapi>' -Stage
+
+# If rollback is required, also while Caddy is STOPPED:
+./scripts/s03_caddy_s02_stage.ps1 -Caddyfile '<private-Caddyfile>' `
+  -CaddyExe '<actual-caddy.exe>' -DpapiKeyFile '<existing-gateway.dpapi>' `
+  -Revert -Stage
+```
+
+Staging saves `<private-Caddyfile>.s02-before-multiclient`,
+validates the modified file with Caddy, and **does not reload or start Caddy**.
+A changed/unknown source, missing rollback file or any unrelated subsequent
+edits fail closed. Back up the old private launcher, old Caddyfile,
+WebUI persistent data and Dispatcher instance beforehand.
+
+**Do not consider this a live gateway validation.** After the owner's
+controlled four-service AIW start, confirm 401 for absent/invalid API
+keys, 200 for each new valid S02 client on Dispatcher and HTTPS Caddy,
+and preserved old-key authorization on the direct `/strata/v1/*` path.
+Verify all three distinct `metrics_proxy_requests.client_id` values
+after actual application requests. The source code has no private
+domain, model, server account or secret baked in.
