@@ -121,11 +121,13 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--source-instance", type=Path, required=True)
     parser.add_argument("--destination-checkout", type=Path, required=True)
-    parser.add_argument("--destination-name", default="Speedy_Win")
+    parser.add_argument("--destination-name", default=None,
+                        help="Defaults to the source instance directory name")
     parser.add_argument("--apply", action="store_true")
     args = parser.parse_args()
-    stage(args.source_instance.expanduser(), args.destination_checkout.expanduser(),
-          args.destination_name, apply=args.apply)
+    source = args.source_instance.expanduser()
+    stage(source, args.destination_checkout.expanduser(),
+          args.destination_name or source.name, apply=args.apply)
 
 
 if __name__ == "__main__":
