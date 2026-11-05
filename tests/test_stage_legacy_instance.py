@@ -1,5 +1,6 @@
 """Offline Speedy instance migration: preserve old metrics, refuse overwrite."""
 import sqlite3
+from contextlib import closing
 import subprocess
 import sys
 import tempfile
@@ -53,13 +54,13 @@ class StageInstanceTests(unittest.TestCase):
             "machine_guid: preserved-machine-guid",
         )
         self.assertTrue((path / "ensembles" / "3090.yaml").exists())
-        with sqlite3.connect(path / "data" / "metrics.db") as db:
+        with closing(sqlite3.connect(path / "data" / "metrics.db")) as db:
             self.assertEqual(db.execute("PRAGMA user_version").fetchone()[0], 9)
             self.assertEqual(db.execute(
                 "SELECT client_id FROM metrics_proxy_requests").fetchone()[0], "old-identity")
         self.legacy.execute("INSERT INTO metrics_proxy_requests(client_id) VALUES('new-legacy-row')")
         self.legacy.commit()
-        with sqlite3.connect(path / "data" / "metrics.db") as db:
+        with closing(sqlite3.connect(path / "data" / "metrics.db")) as db:
             self.assertEqual(db.execute(
                 "SELECT count(*) FROM metrics_proxy_requests").fetchone()[0], 1)
         with self.assertRaisesRegex(ValueError, "already exists"):
@@ -79,7 +80,7 @@ class StageInstanceTests(unittest.TestCase):
         self.assertEqual((target / "instance.yaml").read_text(),
                          (self.source / "instance.yaml").read_text())
         self.assertTrue((target / "ensembles" / "3090.yaml").exists())
-        with sqlite3.connect(target / "data" / "metrics.db") as db:
+        with closing(sqlite3.connect(target / "data" / "metrics.db")) as db:
             self.assertEqual(
                 db.execute("SELECT client_id FROM metrics_proxy_requests").fetchone()[0],
                 "old-identity",
