@@ -1,5 +1,6 @@
 """Offline Speedy instance migration: preserve old metrics, refuse overwrite."""
 import sqlite3
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -63,6 +64,31 @@ class StageInstanceTests(unittest.TestCase):
                 "SELECT count(*) FROM metrics_proxy_requests").fetchone()[0], 1)
         with self.assertRaisesRegex(ValueError, "already exists"):
             stage(self.source, self.destination, "Speedy_Win", apply=True)
+
+    def test_preserves_versioned_instance_git_repository(self):
+        (self.source / ".gitignore").write_text("data/\n", encoding="utf-8")
+        subprocess.run(["git", "init", "--quiet", str(self.source)], check=True)
+        subprocess.run(["git", "-C", str(self.source), "add", "."], check=True)
+        subprocess.run([
+            "git", "-C", str(self.source),
+            "-c", "user.name=CI Test", "-c", "user.email=test@example.invalid",
+            "commit", "--quiet", "-m", "Synthetic old instance configuration",
+        ], check=True)
+        target = stage(self.source, self.destination, "Speedy_Win", apply=True)
+        self.assertTrue((target / ".git").exists())
+        self.assertEqual((target / "instance.yaml").read_text(),
+                         (self.source / "instance.yaml").read_text())
+        self.assertTrue((target / "ensembles" / "3090.yaml").exists())
+        with sqlite3.connect(target / "data" / "metrics.db") as db:
+            self.assertEqual(
+                db.execute("SELECT client_id FROM metrics_proxy_requests").fetchone()[0],
+                "old-identity",
+            )
+        # Dirty versioned configuration must never be silently ignored.
+        self.source.joinpath("ensembles", "3090.yaml").write_text("models: [dirty]\\n")
+        with self.assertRaisesRegex(ValueError, "uncommitted"):
+            stage(self.source, self.destination, "another-instance", apply=True)
+        self.assertFalse((self.destination / "instances" / "another-instance").exists())
 
     def test_missing_or_corrupt_source_rejected(self):
         broken = self.root / "corrupt" / "instances" / "broken"
