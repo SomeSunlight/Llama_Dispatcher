@@ -2,6 +2,7 @@ import argparse
 import asyncio
 import hashlib
 import json
+import logging
 import os
 import re
 import shlex
@@ -28,6 +29,45 @@ from client_policy import (
 )
 
 app = FastAPI(title="Llama Dispatcher Control API")
+
+
+class _HealthyReadinessAccessFilter(logging.Filter):
+    """Silence only successful GET /health access lines, never real API/audit."""
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        if record.name != "uvicorn.access":
+            return True
+        args = record.args
+        # Uvicorn formats access records as:
+        # client, HTTP method, request path, HTTP version, response status.
+        # Unknown shapes fail open (keep the log).
+        if not isinstance(args, tuple) or len(args) != 5:
+            return True
+        _client, method, path, _http, status = args
+        return not (method == "GET" and path == "/health" and status == 200)
+
+
+_HEALTH_ACCESS_FILTER = _HealthyReadinessAccessFilter()
+
+
+def install_quiet_health_logging() -> None:
+    """Install after Uvicorn configures loggers; do not disable access logs."""
+    access = logging.getLogger("uvicorn.access")
+    if _HEALTH_ACCESS_FILTER not in access.filters:
+        access.addFilter(_HEALTH_ACCESS_FILTER)
+
+
+@app.get("/health", include_in_schema=False)
+async def dispatcher_health() -> Response:
+    """Lightweight local readiness without S02 auth or model-list discovery.
+
+    External model availability is checked independently by the engine owner.
+    Do not disclose machine names, instances, aliases, secrets or metrics.
+    """
+    current = orchestrator
+    if current is None or not current.is_running or not current._active_model_aliases:
+        return Response(status_code=503)
+    return Response(status_code=200)
 
 # Opt-in: the existing deployment stays permissive until a private auth file
 # is explicitly supplied at process startup. No identity header is trusted.
@@ -1946,6 +1986,7 @@ def main():
 
         @asynccontextmanager
         async def attach_lifespan(app: FastAPI):
+            install_quiet_health_logging()
             yield
             orchestrator.is_running = False  # No external service operation.
 
@@ -1972,6 +2013,7 @@ def main():
 
         @asynccontextmanager
         async def lifespan(app: FastAPI):
+            install_quiet_health_logging()
             if args.ensemble:
                 orchestrator.server_task = asyncio.create_task(orchestrator.run_server_loop(args.ensemble, overrides))
             else:
