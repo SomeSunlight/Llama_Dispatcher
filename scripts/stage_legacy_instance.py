@@ -7,6 +7,7 @@ current S03 Stage metrics. No running process is started, stopped or adopted.
 Dry run by default; --apply requires explicit operator action.
 """
 from __future__ import annotations
+from contextlib import closing
 import argparse
 import os
 from pathlib import Path
@@ -20,7 +21,7 @@ import tempfile
 def verify_database(path: Path) -> int:
     if path.is_symlink() or not path.is_file():
         raise ValueError("Missing or linked historical SQLite database.")
-    with sqlite3.connect(path.as_uri() + "?mode=ro", uri=True, timeout=10) as db:
+    with closing(sqlite3.connect(path.as_uri() + "?mode=ro", uri=True, timeout=10)) as db:
         if db.execute("PRAGMA integrity_check").fetchone()[0] != "ok":
             raise ValueError("Legacy metrics database failed SQLite integrity check.")
         return int(db.execute("PRAGMA user_version").fetchone()[0])
@@ -29,8 +30,8 @@ def verify_database(path: Path) -> int:
 def backup_database(origin: Path, destination: Path) -> None:
     # SQLite's backup API includes committed WAL content and produces one
     # consistent database snapshot. Do not copy SQLite -wal/-shm directly.
-    with sqlite3.connect(origin.as_uri() + "?mode=ro", uri=True, timeout=15) as source:
-        with sqlite3.connect(destination, timeout=15) as target:
+    with closing(sqlite3.connect(origin.as_uri() + "?mode=ro", uri=True, timeout=15)) as source:
+        with closing(sqlite3.connect(destination, timeout=15)) as target:
             source.backup(target, pages=1000, sleep=0.05)
     verify_database(destination)
 
