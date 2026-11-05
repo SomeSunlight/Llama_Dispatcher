@@ -11,6 +11,7 @@ import httpx
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 import dispatcher_core as core  # noqa: E402
+from client_policy import ClientIdentity  # noqa: E402
 
 
 class ReadinessTests(unittest.IsolatedAsyncioTestCase):
@@ -41,7 +42,7 @@ class ReadinessTests(unittest.IsolatedAsyncioTestCase):
     async def test_s02_protected_request_remains_enforced(self):
         import hashlib
         token = "test-private"
-        identity = core.ClientIdentity("test-app", hashlib.sha256(
+        identity = ClientIdentity("test-app", hashlib.sha256(
             token.encode()).hexdigest(), "passthrough")
         with patch.object(core, "CLIENT_SECURITY", core.ClientSecurity((identity,))):
             async with httpx.AsyncClient(
