@@ -12,6 +12,7 @@ import os
 from pathlib import Path
 import shutil
 import sqlite3
+import subprocess
 import sys
 import tempfile
 
@@ -69,10 +70,38 @@ def stage(source: Path, checkout: Path, dest_name: str, *, apply: bool) -> Path:
     temp = Path(tempfile.mkdtemp(prefix=".stage-legacy-", dir=parent))
     complete = False
     try:
-        shutil.copy2(source / "instance.yaml", temp / "instance.yaml")
-        for name in config_dirs:
-            shutil.copytree(source / name, temp / name)
-        (temp / "data").mkdir()
+        # Preserve the INSTANCE REPOSITORY's branch and Git metadata when the
+        # source is independently versioned (e.g. Speedy_Win). Never clone the
+        # legacy Dispatcher CODE checkout over a new runtime checkout.
+        if (source / ".git").exists():
+            clean = subprocess.run(
+                ["git", "-C", str(source), "status", "--porcelain"],
+                capture_output=True, text=True, check=True,
+            )
+            if clean.stdout.strip():
+                raise ValueError("Source instance Git repository has uncommitted changes; review them first.")
+            subprocess.run(
+                ["git", "clone", "--quiet", "--no-hardlinks", "--local",
+                 str(source), str(temp)],
+                check=True, capture_output=True, text=True,
+            )
+            previous_remote = subprocess.run(
+                ["git", "-C", str(source), "remote", "get-url", "origin"],
+                capture_output=True, text=True, check=False,
+            )
+            if previous_remote.returncode == 0 and previous_remote.stdout.strip():
+                subprocess.run(
+                    ["git", "-C", str(temp), "remote", "set-url", "origin",
+                     previous_remote.stdout.strip()],
+                    check=True, capture_output=True,
+                )
+        else:
+            shutil.copy2(source / "instance.yaml", temp / "instance.yaml")
+            for name in config_dirs:
+                shutil.copytree(source / name, temp / name)
+        (temp / "data").mkdir(exist_ok=True)
+        if (temp / "data" / "metrics.db").exists():
+            raise ValueError("Cloned instance unexpectedly contains a tracked metrics.db.")
         backup_database(metrics, temp / "data" / "metrics.db")
         if target.exists() or target.is_symlink():
             raise ValueError("Destination appeared while copying; aborting.")
@@ -83,6 +112,7 @@ def stage(source: Path, checkout: Path, dest_name: str, *, apply: bool) -> Path:
             shutil.rmtree(temp, ignore_errors=True)
     print("[OK] Instance staged; original historical database preserved.")
     print("The program source code has NOT been copied or replaced.")
+    print("If the source was an independent Git repo, its repository metadata was preserved.")
     return target
 
 
