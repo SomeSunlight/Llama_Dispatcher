@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "aliases": {
+    "sparringpartner": {
+      "parameters": {
+        "reasoning_effort": "high"
+      }
+    },
+    "agent": {
+      "parameters": {
+        "reasoning_effort": "none",
+        "temperature": 0.3,
+        "top_k": 20,
+        "top_p": 0.9,
+        "min_p": 0.1,
+        "repeat_penalty": 1.1
+      }
+    }
+  }
+}
