@@ -38,6 +38,8 @@ jobs:
             'scripts/s03_speedy_smoke.ps1',
             'scripts/s03_speedy_gateway.ps1',
             'scripts/s03_client_registry.ps1',
+            'scripts/s03_role_aliases.ps1',
+            'tests/s03_role_aliases.ps1',
             'scripts/s03_caddy_gateway.ps1',
             'scripts/s03_caddy_s02_stage.ps1',
             'tests/s03_multiclient_registry.ps1',
@@ -62,6 +64,7 @@ jobs:
         shell: pwsh
         run: |
           ./tests/s03_multiclient_registry.ps1
+          ./tests/s03_role_aliases.ps1
           ./tests/s03_caddy_s02_stage.ps1
 
       - name: S03 Caddy gateway dry-run (synthetic only)
