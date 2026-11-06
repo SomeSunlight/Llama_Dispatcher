@@ -484,3 +484,66 @@ and preserved old-key authorization on the direct `/strata/v1/*` path.
 Verify all three distinct `metrics_proxy_requests.client_id` values
 after actual application requests. The source code has no private
 domain, model, server account or secret baked in.
+
+
+## Two role aliases on the same native model (short-term S03 bridge)
+
+S03 can now expose `sparringpartner` and `agent` without starting
+another model or implementing S07. The starter option
+`-RoleAliasesFile <absolute-private-role-file.json>` reads a
+**private, operator-authored** role-policy file. The public example
+[examples/s03-role-aliases.json](../examples/s03-role-aliases.json)
+has no token, host-specific path or native model identifier.
+The starter discovers the native Strata model on every start and
+maps **both** aliases to that same model. Existing single-alias
+invocations remain unchanged.
+
+The template sets `sparringpartner` to
+`reasoning_effort: high` and `agent` to
+`reasoning_effort: none` with focused sampling, reflecting the *intention*
+of the earlier 3090 ensemble. This is **not** yet engine-neutral S07
+ensemble compilation or Gemma/Strata behavior equivalence.
+
+**Important:** AIW's initially generated S02 clients use
+`policy: passthrough`; in that mode only alias-name/model remapping
+occurs — the Dispatcher deliberately does **not** inject role
+parameters. To apply role defaults for Goose, change the
+`goose-wsl` entry in the *private* AIW `services.yaml` to
+`policy: default` (client-supplied parameters still win).
+Do this only during an owner-approved stopped-service window,
+then AIW **Manage application access keys → Prepare the
+Dispatcher key-verification file** regenerates the same four
+SHA-256 credentials with the updated policy. Do **not** rotate or
+reissue original API keys. `policy: enforce` can be considered
+separately when strict role overrides are needed.
+
+### Owner-controlled staging
+
+1. AIW **Run and monitor AI services → Stop all managed
+   services**. Confirm and check port ownership.
+2. In the *current Dispatcher review checkout*, pull latest and
+   copy `examples/s03-role-aliases.json` into a **new private**
+   location (e.g. the private AIW services directory).
+3. AIW **Set up or change this computer → Edit service startup
+   settings**. Append `"-RoleAliasesFile"` and the **absolute
+   private JSON filename** as two array items in
+   `dispatcher.arguments` of `native-host.json`. Do not edit the
+   generated `strata-attach.json`, which the S03 starter replaces
+   every time.
+4. Optionally change only Goose's private S02 policy from
+   `passthrough` to `default`, then use the existing AIW
+   **Manage keys → Prepare Dispatcher key-verification file**.
+5. AIW **Setup → Check / Apply edited settings**, check port
+   owners, then **Run and monitor → Start all enabled services**.
+6. Authenticate to `GET /v1/models` and verify both names.
+   Test a small Goose completion with each alias. Check actual
+   Dispatcher request-metric `client_model` and effective
+   parameters; client-supplied overrides under `default` win.
+   Existing client bearer secrets and HTTPS URL are unchanged.
+
+Rollback: owned stop, remove the two `-RoleAliasesFile`
+array items, restore Goose's former policy if altered, re-render
+S02 registry and process definitions, check, then restart.
+**Never copy old Dispatcher program code over this checkout,
+overwrite either SQLite database, or launch legacy managed
+llama.cpp simultaneously.**
