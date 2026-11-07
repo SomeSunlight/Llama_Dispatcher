@@ -83,6 +83,34 @@ class ConfigurationContracts(unittest.TestCase):
         with self.assertRaises(StrataConfigurationError):
             StrataBackend.from_mapping(configuration(), environ={})
 
+    def test_role_example_maps_one_native_model_and_respects_client_policy(self):
+        role_file = ROOT / "examples" / "s03-role-aliases.json"
+        roles = json.loads(role_file.read_text(encoding="utf-8"))
+        self.assertEqual(roles["schema_version"], 1)
+        definitions = {
+            alias: {"model": "real-native-id", "parameters": role["parameters"]}
+            for alias, role in roles["aliases"].items()
+        }
+        config = configuration()
+        config["aliases"] = definitions
+        backend = StrataBackend.from_mapping(
+            config, environ={"S03_NATIVE_KEY": "synthetic"}
+        )
+        self.assertEqual(set(backend.aliases), {"agent", "sparringpartner"})
+        for alias, effort in (("agent", "none"), ("sparringpartner", "high")):
+            translated, injected = backend.resolve({"model": alias}, "default")
+            self.assertEqual(translated["model"], "real-native-id")
+            self.assertEqual(translated["reasoning_effort"], effort)
+            self.assertEqual(injected["reasoning_effort"], effort)
+            passed, ignored = backend.resolve({"model": alias}, "passthrough")
+            self.assertEqual(passed["model"], "real-native-id")
+            self.assertNotIn("reasoning_effort", passed)
+            self.assertEqual(ignored, {})
+        override, _ = backend.resolve({
+            "model": "agent", "reasoning_effort": "medium",
+        }, "default")
+        self.assertEqual(override["reasoning_effort"], "medium")
+
     def test_reasoning_is_unambiguous_and_no_unsafe_merge(self):
         backend = StrataBackend.from_mapping(configuration(), environ={"S03_NATIVE_KEY": "key"})
         body, injected = backend.resolve({

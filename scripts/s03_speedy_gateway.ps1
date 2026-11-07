@@ -4,8 +4,13 @@
     Keep an S03 Dispatcher attached to an already running native Strata on Speedy.
 .DESCRIPTION
     No process manager: foreground-only owner trial on loopback port 8001.
-    Reuses the DPAPI-protected gateway/Strata secret, never prints or stores
-    plaintext, hashes it for one S02 transitional identity. Caddy/Strata are
+    Reuses the DPAPI-protected native Strata secret. With -ClientConfig
+    (or inherited DISPATCHER_CLIENT_CONFIG), validates and uses an existing
+    multi-client S02 digest registry without overwriting it. Optional
+    -RoleAliasesFile loads multiple public aliases and generic OpenAI-style
+    request defaults from a private JSON; all map to the same discovered
+    externally managed native Strata model, never a second process. Without external
+    config, it retains the legacy one-key transitional behavior. Caddy/Strata are
     never started, stopped, configured or reloaded by this script.
     A shared gateway token cannot distinguish Goose from Open WebUI.
 .EXAMPLE
@@ -17,12 +22,16 @@ param(
     [string]$StrataUrl = 'http://127.0.0.1:8080',
     [ValidateRange(1, 65535)][int]$DispatcherPort = 8001,
     [string]$Instance = 'Speedy_S03_Stage',
-    [string]$Alias = 'agent'
+    [string]$Alias = 'agent',
+    [string]$ClientConfig = '',
+    [string]$RoleAliasesFile = ''
 )
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 $repo = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
+. (Join-Path $PSScriptRoot 's03_client_registry.ps1')
+. (Join-Path $PSScriptRoot 's03_role_aliases.ps1')
 $previousNative = [Environment]::GetEnvironmentVariable('STRATA_NATIVE_KEY', 'Process')
 $previousClient = [Environment]::GetEnvironmentVariable('DISPATCHER_CLIENT_CONFIG', 'Process')
 
@@ -63,31 +72,42 @@ try {
 
     $private = Join-Path $env:LOCALAPPDATA 'Llama_Dispatcher\S03\gateway'
     New-Item -ItemType Directory -Path $private -Force | Out-Null
-    $clientFile = Join-Path $private 'clients.json'
+    $legacyClientFile = Join-Path $private 'clients.json'
     $attachFile = Join-Path $private 'strata-attach.json'
-    $digest = [Convert]::ToHexString(
-        [Security.Cryptography.SHA256]::HashData([Text.Encoding]::UTF8.GetBytes($key))
-    ).ToLowerInvariant()
+    # Explicit -ClientConfig takes precedence. The AIW native host can also
+    # supply a nonsecret DISPATCHER_CLIENT_CONFIG via its environment mapping.
+    # Never regenerate the old one-key registry when an external file is set.
+    $requestedClientConfig = if ($ClientConfig) { $ClientConfig } else { $previousClient }
+    $clientFile = Select-S03ClientRegistry -ExternalPath $requestedClientConfig `
+        -LegacyOutputPath $legacyClientFile -LegacyKey $key
 
-    # Single, honest transitional identity for the previously shared Caddy key.
-    # Passthrough preserves the successful direct-Strata request policy initially.
-    @{ schema_version = 1; clients = @(@{
-        id = 'home-gateway'; token_sha256 = $digest; policy = 'passthrough'
-    }) } | ConvertTo-Json -Depth 5 | Set-Content -Encoding utf8 -LiteralPath $clientFile
-
-    # Do not impose an arbitrary reasoning budget or temperature on Goose.
-    # Strata continues to use its existing configured defaults.
+    # Without explicit private role settings the S03 single-alias baseline
+    # remains unchanged, including no forced sampling or thinking controls.
+    $roleAliases = if ($RoleAliasesFile) {
+        Get-S03RoleAliases -RoleFile $RoleAliasesFile -NativeModel $nativeId
+    }
+    else {
+        @{ $Alias = @{ model = $nativeId; parameters = @{} } }
+    }
     @{ schema_version = 1; endpoint = $StrataUrl.TrimEnd('/');
        credential_env = 'STRATA_NATIVE_KEY';
-       aliases = @{ $Alias = @{ model = $nativeId; parameters = @{} } }
-    } | ConvertTo-Json -Depth 6 | Set-Content -Encoding utf8 -LiteralPath $attachFile
+       aliases = $roleAliases
+    } | ConvertTo-Json -Depth 12 | Set-Content -Encoding utf8 -LiteralPath $attachFile
 
     $env:STRATA_NATIVE_KEY = $key
     $env:DISPATCHER_CLIENT_CONFIG = $clientFile
 
     Write-Host "[S03] Native Strata reachable; model: $nativeId"
-    Write-Host "[S03] Client identity: home-gateway (shared key, no false per-app attribution)"
-    Write-Host "[S03] Start Dispatcher on 127.0.0.1:$DispatcherPort; public alias: $Alias"
+    if (-not $requestedClientConfig) {
+        Write-Warning '[S03] Legacy shared key only; configure S02 multi-client registry before production adoption.'
+    }
+    if ($RoleAliasesFile) {
+        Write-Host "[S03] Public role aliases: $(($roleAliases.Keys | Sort-Object) -join ', ')"
+        Write-Host '[S03] Per-alias policy injection depends on S02 client policy (default/enforce).'
+    }
+    else {
+        Write-Host "[S03] Start Dispatcher on 127.0.0.1:$DispatcherPort; public alias: $Alias"
+    }
     Write-Host '[S03] Keep this PowerShell window open; Ctrl+C stops only this Dispatcher.'
     Push-Location $repo
     try {

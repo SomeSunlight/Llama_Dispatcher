@@ -1,5 +1,5 @@
 # Llama Dispatcher — Local Context Source
-<!-- ctx:node id="e3e6391b-6eb7-4b2a-ba1d-f969a65bbf08" name="Llama Dispatcher" version="0.1.4-draft" -->
+<!-- ctx:node id="e3e6391b-6eb7-4b2a-ba1d-f969a65bbf08" name="Llama Dispatcher" version="0.1.4-draft" adapters="agents,goose" -->
 
 <!-- contextcanon:format Node
 Format: Node metadata follows the # title: ctx:node id="..." name="..." version="...". Preserve existing identity.

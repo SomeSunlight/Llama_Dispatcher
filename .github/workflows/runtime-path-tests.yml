@@ -37,7 +37,13 @@ jobs:
             'tests/s03_cleanup.ps1',
             'scripts/s03_speedy_smoke.ps1',
             'scripts/s03_speedy_gateway.ps1',
-            'scripts/s03_caddy_gateway.ps1'
+            'scripts/s03_client_registry.ps1',
+            'scripts/s03_role_aliases.ps1',
+            'tests/s03_role_aliases.ps1',
+            'scripts/s03_caddy_gateway.ps1',
+            'scripts/s03_caddy_s02_stage.ps1',
+            'tests/s03_multiclient_registry.ps1',
+            'tests/s03_caddy_s02_stage.ps1'
           )) {
             $tokens = $null
             $errors = $null
@@ -53,6 +59,14 @@ jobs:
         if: runner.os == 'Windows'
         shell: pwsh
         run: ./tests/s03_cleanup.ps1
+      - name: Verify S03 individual client registry and Caddy offline staging (synthetic only)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          ./tests/s03_multiclient_registry.ps1
+          ./tests/s03_role_aliases.ps1
+          ./tests/s03_caddy_s02_stage.ps1
+
       - name: S03 Caddy gateway dry-run (synthetic only)
         if: runner.os == 'Windows'
         shell: pwsh

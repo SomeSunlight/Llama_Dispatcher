@@ -418,3 +418,132 @@ See the per-instance owner gates in PLAN §6.
 `main` build with its original llama.cpp serve configuration, or retain the
 direct Strata diagnostic Caddy `/strata/v1` route on Speedy. No schema
 migration, native Strata settings or instance files are changed by the PR.
+
+## Separate S02 application keys before native host startup (review issue #41)
+
+**Review-only extension**: [multi-client S03 draft PR #30](https://github.com/SomeSunlight/Llama_Dispatcher/pull/30)
+allows a separately configured Windows AI Workstation host to start the
+S03 attached Dispatcher with a **pre-existing hash-only** S02 registry.
+It never generates or transports original application keys.
+
+An existing S03 launch with no additional input still creates a
+single `home-gateway` transitional identity. For the multi-client
+path, add either an absolute `-ClientConfig '<private-clients.json>'` argument
+to `scripts/s03_speedy_gateway.ps1`, or provide the *nonsecret*
+`DISPATCHER_CLIENT_CONFIG` environment variable before invoking the
+script. If an explicit path is given, the path must exist and contain
+an S02 digest file; invalid/missing files **abort startup** rather than
+downgrading to the old shared key. Generated S02 original keys and native
+Strata's protected key stay separate; the S03 script only **reads**
+the external digest file, without rewriting it. Use separate client IDs
+for each Goose/Open WebUI application and an optional imported legacy
+key for rollback.
+
+### Offline Caddy preparation (no running services)
+
+The previous Caddy gateway checked one old Bearer key for both Dispatcher
+`/v1/*` and direct native Strata `/strata/v1/*`, and stripped the
+client Authorization header before proxying to Dispatcher. This blocks
+independent S02 application identities.
+
+The new private Caddyfile stage helper `scripts/s03_caddy_s02_stage.ps1`
+requires the **exact reviewed topology**: an active `@unauthorizedAI`
+matcher, two explicitly routed backends, the existing key on the direct
+native Strata path, and the legacy stripped Dispatcher header. It changes
+the matcher so **only direct `/strata/v1/*`** still requires the existing
+gateway key, and forwards the original application Authorization header
+on Dispatcher `/v1/*`. Dispatcher itself MUST authenticate every S02
+client and reject unknown/missing keys with HTTP 401.
+
+For an operator-local installation, using the actual private absolute paths:
+
+```powershell
+# Read-only preview; nothing starts or changes:
+./scripts/s03_caddy_s02_stage.ps1 -Caddyfile '<private-Caddyfile>'
+
+# Only while the old Caddy is STOPPED; validates with the installed Caddy:
+./scripts/s03_caddy_s02_stage.ps1 -Caddyfile '<private-Caddyfile>' `
+  -CaddyExe '<actual-caddy.exe>' -DpapiKeyFile '<existing-gateway.dpapi>' -Stage
+
+# If rollback is required, also while Caddy is STOPPED:
+./scripts/s03_caddy_s02_stage.ps1 -Caddyfile '<private-Caddyfile>' `
+  -CaddyExe '<actual-caddy.exe>' -DpapiKeyFile '<existing-gateway.dpapi>' `
+  -Revert -Stage
+```
+
+Staging saves `<private-Caddyfile>.s02-before-multiclient`,
+validates the modified file with Caddy, and **does not reload or start Caddy**.
+A changed/unknown source, missing rollback file or any unrelated subsequent
+edits fail closed. Back up the old private launcher, old Caddyfile,
+WebUI persistent data and Dispatcher instance beforehand.
+
+**Do not consider this a live gateway validation.** After the owner's
+controlled four-service AIW start, confirm 401 for absent/invalid API
+keys, 200 for each new valid S02 client on Dispatcher and HTTPS Caddy,
+and preserved old-key authorization on the direct `/strata/v1/*` path.
+Verify all three distinct `metrics_proxy_requests.client_id` values
+after actual application requests. The source code has no private
+domain, model, server account or secret baked in.
+
+
+## Two role aliases on the same native model (short-term S03 bridge)
+
+S03 can now expose `sparringpartner` and `agent` without starting
+another model or implementing S07. The starter option
+`-RoleAliasesFile <absolute-private-role-file.json>` reads a
+**private, operator-authored** role-policy file. The public example
+[examples/s03-role-aliases.json](../examples/s03-role-aliases.json)
+has no token, host-specific path or native model identifier.
+The starter discovers the native Strata model on every start and
+maps **both** aliases to that same model. Existing single-alias
+invocations remain unchanged.
+
+The template sets `sparringpartner` to
+`reasoning_effort: high` and `agent` to
+`reasoning_effort: none` with focused sampling, reflecting the *intention*
+of the earlier 3090 ensemble. This is **not** yet engine-neutral S07
+ensemble compilation or Gemma/Strata behavior equivalence.
+
+**Important:** AIW's initially generated S02 clients use
+`policy: passthrough`; in that mode only alias-name/model remapping
+occurs — the Dispatcher deliberately does **not** inject role
+parameters. To apply role defaults for Goose, change the
+`goose-wsl` entry in the *private* AIW `services.yaml` to
+`policy: default` (client-supplied parameters still win).
+Do this only during an owner-approved stopped-service window,
+then AIW **Manage application access keys → Prepare the
+Dispatcher key-verification file** regenerates the same four
+SHA-256 credentials with the updated policy. Do **not** rotate or
+reissue original API keys. `policy: enforce` can be considered
+separately when strict role overrides are needed.
+
+### Owner-controlled staging
+
+1. AIW **Run and monitor AI services → Stop all managed
+   services**. Confirm and check port ownership.
+2. In the *current Dispatcher review checkout*, pull latest and
+   copy `examples/s03-role-aliases.json` into a **new private**
+   location (e.g. the private AIW services directory).
+3. AIW **Set up or change this computer → Edit service startup
+   settings**. Append `"-RoleAliasesFile"` and the **absolute
+   private JSON filename** as two array items in
+   `dispatcher.arguments` of `native-host.json`. Do not edit the
+   generated `strata-attach.json`, which the S03 starter replaces
+   every time.
+4. Optionally change only Goose's private S02 policy from
+   `passthrough` to `default`, then use the existing AIW
+   **Manage keys → Prepare Dispatcher key-verification file**.
+5. AIW **Setup → Check / Apply edited settings**, check port
+   owners, then **Run and monitor → Start all enabled services**.
+6. Authenticate to `GET /v1/models` and verify both names.
+   Test a small Goose completion with each alias. Check actual
+   Dispatcher request-metric `client_model` and effective
+   parameters; client-supplied overrides under `default` win.
+   Existing client bearer secrets and HTTPS URL are unchanged.
+
+Rollback: owned stop, remove the two `-RoleAliasesFile`
+array items, restore Goose's former policy if altered, re-render
+S02 registry and process definitions, check, then restart.
+**Never copy old Dispatcher program code over this checkout,
+overwrite either SQLite database, or launch legacy managed
+llama.cpp simultaneously.**
