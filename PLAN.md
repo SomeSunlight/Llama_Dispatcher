@@ -1,3 +1,16 @@
+## S03 role-routing integration checkpoint — live use, 2026-11-07
+
+**Current merge candidate:** [PR #30](https://github.com/SomeSunlight/Llama_Dispatcher/pull/30), with matching [AI Workstation PR #45](https://github.com/SomeSunlight/ai-workstation/pull/45). Both have passed exact-head Windows/Ubuntu CI before this checkpoint and are now being prepared for separate owner-reviewed squash merges to `main`. Earlier pending-S03 or pending-first-Strata-smoke notes below are historical.
+
+**Operator-verified real usage:**
+- Native Strata remains one externally owned backend. Attached Dispatcher advertises `sparringpartner` and `agent` as independent public model aliases targeting the same physical model. The authenticated Caddy HTTPS path and independent S02 identities work from native Windows Open WebUI and remote WSL Open WebUI/Goose.
+- `default` S02 policy injects the configured role parameters. Real `metrics_proxy_requests` evidence includes `client_model=agent`, `policy_mode=default`, `reasoning_effort=none`, sampling defaults, and `source=dispatcher_policy`; the operator observed non-reasoning agent behavior. Real Goose calls have `client_model=sparringpartner`, `reasoning_effort=high`, HTTP 200 and `finish_reason=tool_calls`. Requests preserve the same `target_model`; no second inference process or metrics migration was required.
+- **Goose planner/subagent orchestration is separate:** `GOOSE_SUBAGENT_*` selection does not make every root request a subagent call. Evidence so far proves the root Goose/provider request path, **not** a successfully invoked separate `agent` subagent. Treat this as an external Goose setup/test gate, not an incomplete alias-routing contract.
+
+**Remaining work stays independent:** S04/S05/S06 telemetry/history, S07 deterministic engine launch plans and the old 3090 ensemble remain separately gated. [PR #32](https://github.com/SomeSunlight/Llama_Dispatcher/pull/32) is stacked on #30 and must be rebased/re-reviewed when #30 is squash-merged; do not merge legacy history staging as part of the two-role milestone. AIW's native Strata/Kaspersky-integrity hardening [issue #53](https://github.com/SomeSunlight/ai-workstation/issues/53) is the next urgent native-host focus after the baseline merges. Preserve direct-Strata rollback, client credentials, old instance data and running service ownership.
+
+---
+
 ## Review gate — resilient owned-directory cleanup (#28 / PR #29)
 
 **Status:** Implementation, accepted ContextCanon updates and owner Windows regression tests complete; final squash merge remains the owner's decision.
